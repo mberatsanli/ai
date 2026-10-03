@@ -1,6 +1,23 @@
-# skills
+# ai
 
-Agent skills by mberatsanli, for Claude Code and other agents that read `SKILL.md` files.
+My AI setup, shared: skills, plugins and agent configs for Claude Code and other coding agents.
+
+```
+skills/     one folder per skill, each with a SKILL.md (works with `npx skills`)
+plugins/    Claude Code plugins (coming)
+agents/     agent and subagent configs (coming)
+```
+
+## Install a skill
+
+With the [skills](https://www.npmjs.com/package/skills) CLI:
+
+```sh
+npx skills add mberatsanli/ai --list                 # see what's here
+npx skills add mberatsanli/ai --skill agent-team     # install one
+```
+
+Or by hand: copy or link `skills/<name>` into `~/.claude/skills/<name>`.
 
 ## agent-team
 
@@ -33,13 +50,6 @@ phase says what they must do.
 - Orca with orchestration, `gh`, `git`, `python3`, a POSIX shell.
 - The role skills it names (`tdd`, `implement`, `pr`, `to-spec`, `to-tickets`, `triage`, `grilling`,
   `research`, `codebase-design`), installed in the project.
-
-### Install
-
-```sh
-git clone https://github.com/mberatsanli/skills ~/src/mberatsanli-skills
-ln -s ~/src/mberatsanli-skills/skills/agent-team ~/.claude/skills/agent-team
-```
 
 ## License
 
