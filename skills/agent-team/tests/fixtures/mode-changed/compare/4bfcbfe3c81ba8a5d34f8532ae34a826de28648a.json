@@ -1,0 +1,93 @@
+{
+  "status": "diverged",
+  "ahead_by": 1,
+  "behind_by": 25,
+  "total_commits": 1,
+  "files": [
+    {
+      "filename": "bun.lock",
+      "status": "modified",
+      "sha": "0bc2566f07a99f1659416c5c476852aaf66d1b7b"
+    },
+    {
+      "filename": "packages/core/package.json",
+      "status": "added",
+      "sha": "9ffb065ad1b49a178ce080128998acdd695c359c"
+    },
+    {
+      "filename": "packages/core/src/generated.ts",
+      "status": "added",
+      "sha": "9a1b63021e00b0c51d6700e8af9653b8028f068b"
+    },
+    {
+      "filename": "packages/core/src/index.ts",
+      "status": "added",
+      "sha": "91e290fef5c022f6a6e5fcd90b6e3d1223bde83c"
+    },
+    {
+      "filename": "packages/core/test/protocol.test.ts",
+      "status": "added",
+      "sha": "1902fe9b04a5fdf8f0432000c242b5ca10a7c7f1"
+    },
+    {
+      "filename": "packages/core/tsconfig.build.json",
+      "status": "added",
+      "sha": "f55d5732397e91e8d56f6f19774c9596851f8b2d"
+    },
+    {
+      "filename": "packages/core/tsconfig.json",
+      "status": "added",
+      "sha": "3a716e22648b6c1de63756b091d390f2bb1f0923"
+    },
+    {
+      "filename": "schema/api.def",
+      "status": "added",
+      "sha": "61e61f20828cbb07611e4011717152bcffe0221d"
+    },
+    {
+      "filename": "schema/package.json",
+      "status": "added",
+      "sha": "7d659b17d1a1f660ddcc6f966dad0151999423dd"
+    },
+    {
+      "filename": "schema/scripts/generate.ts",
+      "status": "added",
+      "sha": "1930c012004500987ae78797bb5860b2d894c130"
+    },
+    {
+      "filename": "schema/src/emit.ts",
+      "status": "added",
+      "sha": "0ae5ba1b0b3c17d915b9bab324bbdbd133c245c6"
+    },
+    {
+      "filename": "schema/src/generate.ts",
+      "status": "added",
+      "sha": "e7fc928a004663a337773a7e7943d3a45c9d0e46"
+    },
+    {
+      "filename": "schema/src/protocol.ts",
+      "status": "added",
+      "sha": "9d2d523f71969e0123ecf96e0677a2e56867dc36"
+    },
+    {
+      "filename": "schema/test/fixtures/fixture.def",
+      "status": "added",
+      "sha": "8e10459da808cf64261fb20ddb67d218981b034c"
+    },
+    {
+      "filename": "schema/test/generate.test.ts",
+      "status": "added",
+      "sha": "5c968f76412aa9f4c39bec908d051ad81c82fc7c"
+    },
+    {
+      "filename": "schema/test/generated-types.test.ts",
+      "status": "added",
+      "sha": "514c5b5e5f98f4e2b892f1a979689fa88add4f3c"
+    },
+    {
+      "filename": "schema/tsconfig.json",
+      "status": "added",
+      "sha": "06f3c2de0ad07dc8be0d7bc555ea8798ec3190e5"
+    }
+  ]
+}

@@ -50,9 +50,13 @@ review whose first line is exactly `REVIEW: APPROVED` or `REVIEW: CHANGES_REQUES
 newest `REVIEW:` review and merges only if it approves the head, or the approval carries over: every
 commit after it is a merge from `main` that changed none of the PR's files.
 
+The required checks are the `requiredChecks` in `agent-team.json`: <CI job names>. The gate refuses
+while any of them failed, is still running, or never ran.
+
 `scripts/merge-gate <PR> --update` merges `main` in, waits for CI, then applies the rules. If GitHub
-Actions can't run, `scripts/local-ci <PR>` runs the same jobs locally and posts commit statuses. Only the
-coordinator runs it.
+Actions can't run, `scripts/local-ci <PR>` runs the same jobs locally and posts commit statuses; with
+`mergeGate.localCiOnUpdate` on, `--update` runs it by itself. Only the coordinator runs it. Both scripts
+come from the agent-team skill; change `agent-team.json`, not the scripts.
 
 ## What still needs a human
 

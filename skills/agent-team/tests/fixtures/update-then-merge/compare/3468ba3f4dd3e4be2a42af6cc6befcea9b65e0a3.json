@@ -1,0 +1,88 @@
+{
+  "status": "diverged",
+  "ahead_by": 9,
+  "behind_by": 1,
+  "total_commits": 9,
+  "files": [
+    {
+      "filename": "bun.lock",
+      "status": "modified",
+      "sha": "f34927381bf6115bcc8ca6de4e6f0a0001657fff"
+    },
+    {
+      "filename": "packages/db/package.json",
+      "status": "added",
+      "sha": "fc2dbe4269a9b42ac7b10088e0c1a6615ea28e51"
+    },
+    {
+      "filename": "packages/db/src/scan.ts",
+      "status": "added",
+      "sha": "b78e6425b0b56ffddcd943cf07f0f05ec94f94bc"
+    },
+    {
+      "filename": "packages/db/src/fields.ts",
+      "status": "added",
+      "sha": "eee2243eec846d83278c42212bba7cd4ecc89e07"
+    },
+    {
+      "filename": "packages/db/src/index.ts",
+      "status": "added",
+      "sha": "5d10c550817ef9c871e1af66f26cc2c9997c9782"
+    },
+    {
+      "filename": "packages/db/src/names.ts",
+      "status": "added",
+      "sha": "743f4e315b7ba957881cd7d0697ea69bdd7230f0"
+    },
+    {
+      "filename": "packages/db/src/table-schema.ts",
+      "status": "added",
+      "sha": "50885a6230ae81b5d044c0d85d2413daf32c34cb"
+    },
+    {
+      "filename": "packages/db/test/scan-speed.test.ts",
+      "status": "added",
+      "sha": "2c9860c224042c175df456e5ea8243426b26b83e"
+    },
+    {
+      "filename": "packages/db/test/scan.test.ts",
+      "status": "added",
+      "sha": "4cb2901a68f58da42a67e5edb78ec8242563dc66"
+    },
+    {
+      "filename": "packages/db/test/find-item.ts",
+      "status": "added",
+      "sha": "671f32004145578ed1430f5a301e8cc677ab33e5"
+    },
+    {
+      "filename": "packages/db/test/memory-db.test.ts",
+      "status": "added",
+      "sha": "7b13e77a401fb9df4ef67d3bc2cb3ad5d6f59138"
+    },
+    {
+      "filename": "packages/db/test/names-check.test.ts",
+      "status": "added",
+      "sha": "70c9b992cc755d5c0b0f6db589df7dd1d7df6498"
+    },
+    {
+      "filename": "packages/db/test/sample-schema.ts",
+      "status": "added",
+      "sha": "13d6e0ae9f8392eb6ecc6495ad595693b6f1824a"
+    },
+    {
+      "filename": "packages/db/test/table-schema.test.ts",
+      "status": "added",
+      "sha": "967d20b2e49173413a2110b023e4c50a4b97dbfb"
+    },
+    {
+      "filename": "packages/db/tsconfig.build.json",
+      "status": "added",
+      "sha": "3cac085d48e537b93982248d8fb978bd9a583cf9"
+    },
+    {
+      "filename": "packages/db/tsconfig.json",
+      "status": "added",
+      "sha": "397c10c1804c9b8bdd2a5b58c7d3ae25daa9dfa3"
+    }
+  ]
+}

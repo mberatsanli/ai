@@ -1,0 +1,7 @@
+#!/bin/sh
+# Stands in for scripts/local-ci in merge-gate tests: records that it ran in
+# $FAKE_GH_WORK_DIR/writes.log, next to the fake gh's writes, so a test sees the order of everything
+# that changed GitHub. Exits with $FAKE_LOCAL_CI_EXIT_CODE, 0 by default.
+set -eu
+echo "local-ci $*" >> "$FAKE_GH_WORK_DIR/writes.log"
+exit "${FAKE_LOCAL_CI_EXIT_CODE:-0}"

@@ -62,7 +62,7 @@ into the project and fills in the project's stack. Each role file names the skil
 
 ## Dependencies
 
-Tools: Orca (app + CLI), Claude Code, `gh`, `git`, `python3`, Node (`npx`); Docker and Codex optional.
+Tools: Orca (app + CLI), Claude Code, `gh`, `git`, Python 3.9+, Node (`npx`); Docker and Codex optional.
 Skills: `orca-cli` and `orchestration` (bundled with Orca), and the role skills from
 `mattpocock/skills`, installed in the project. Exact commands: [README.md](README.md#dependencies) and
 phase 2. Before phase 2 ends, check each one exists (`orca --version`, `gh auth status`,
@@ -70,8 +70,16 @@ phase 2. Before phase 2 ends, check each one exists (`orca --version`, `gh auth 
 
 ## Scripts
 
+The project gets two scripts from this skill: `scripts/merge-gate` and `scripts/local-ci`, from
+[templates/scripts/](templates/scripts/) (Python standard library, `gh` and `git`, nothing else). Phase 2
+copies them and writes `agent-team.json` at the repo root from
+[templates/agent-team.json](templates/agent-team.json): required checks, local CI jobs, lock files, review
+marker, timeouts. Nothing project-specific lives in the scripts. How they work, every config field and
+the exit codes: [templates/scripts/README.md](templates/scripts/README.md). Their tests: `cd tests &&
+python3 -B -m unittest`.
+
 [scripts/](scripts/) runs the loop. Set `ORCA_RUN` once; see [scripts/env.sh](scripts/env.sh) for the
-other settings (`SPRINT`, `SCRUM_ISSUE`, `REPO`, `GATE`, `LOCAL_CI`, `GATE_ENV`).
+other settings (`SPRINT`, `SCRUM_ISSUE`, `REPO`, `GATE`, `LOCAL_CI`, `AGENT_TEAM_LOCAL_CI`).
 
 | Script | Does |
 |---|---|
@@ -92,4 +100,6 @@ More in [phases/orca.md](phases/orca.md).
 - Only one `check --wait` may run at a time (`waiter_exists`).
 - `--worktree path:...` can't be combined with `--name`.
 - Don't wait on a process with `pgrep -f <pattern>`: it matches its own shell. Wait on a PID.
-- If GitHub Actions can't run (billing), local CI must post the statuses the gate needs.
+- If GitHub Actions can't run (billing), set `mergeGate.localCiOnUpdate` in `agent-team.json` (or
+  `AGENT_TEAM_LOCAL_CI=1`): `merge-gate --update` then runs `scripts/local-ci`, which posts the statuses
+  the gate needs.

@@ -1,0 +1,380 @@
+#!/usr/bin/env python3
+"""Runs the CI jobs on a PR's head on this machine and posts each result as a commit status, which
+scripts/merge-gate reads next to the GitHub Actions check runs. For when Actions can't run.
+
+Usage: scripts/local-ci <PR>
+
+The jobs come from localCi in agent-team.json, read from this checkout (not from the PR, so a PR can't
+change what proves it). They run one after another, so a run doesn't take over the machine.
+
+Only the coordinator runs it. Every status description starts with "local-ci <host> <sha7>: ", and
+merge-gate only counts a passed commit status that carries it. Run it from a clean checkout of the
+repo: it checks the head out into a temporary worktree, so your own checkout is never touched, and
+keeps every log next to it. One run at a time: a second one exits with 2 while the first holds the lock.
+
+A broken machine is not a broken PR. local-ci refuses to start, and posts nothing, when a job needs
+Docker and Docker isn't running. A job that exits with 75 (EX_TEMPFAIL: "the machine broke, try again")
+is posted as `error`, not `failure`, and merge-gate --update runs local CI again for it.
+
+Exit codes: 0 every job passed, 1 a job failed, 2 bad arguments, a bad config, a dirty working tree,
+Docker not running, another run holds the lock, a signal, a job errored, or a gh or git command failed.
+Needs Python 3.9+, gh (logged in) and git. Standard library only.
+"""
+
+import json
+import os
+import re
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+from typing import Optional
+
+sys.dont_write_bytecode = True  # Keep __pycache__ out of the project's scripts/ folder.
+from agent_team_config import ConfigError, Job, LocalCi, load_config  # noqa: E402
+
+USAGE = "Usage: scripts/local-ci <PR>"
+
+EXIT_PASSED = 0
+EXIT_FAILED = 1
+EXIT_ERROR = 2
+
+# What a job exits with when the machine, not the PR, kept it from running (sysexits.h EX_TEMPFAIL).
+MACHINE_ERROR_EXIT_CODE = 75
+# GitHub refuses a commit status whose description is longer than this.
+STATUS_DESCRIPTION_LIMIT = 140
+# Shared by every worktree of this clone, so two runs never compete for the machine.
+LOCK_NAME = "agent-team-local-ci.lock"
+# How long a stopped job gets to clean up after SIGTERM before it is killed.
+STOP_GRACE_SECONDS = 10
+
+SIGNAL_MESSAGES = {
+    signal.SIGINT: "scripts/local-ci was interrupted (SIGINT)",
+    signal.SIGTERM: "scripts/local-ci was stopped (SIGTERM)",
+    signal.SIGHUP: "scripts/local-ci lost its terminal (SIGHUP)",
+}
+
+
+class CommandError(Exception):
+    """A gh or git command failed. The message names the command and its reason."""
+
+
+class Stopped(Exception):
+    """A signal asked local-ci to stop."""
+
+
+def run_command(args: list[str], cwd: Optional[str] = None) -> str:
+    try:
+        result = subprocess.run(
+            args, cwd=cwd, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False
+        )
+    except OSError as error:
+        raise CommandError(f"{args[0]} could not start: {error}")
+    if result.returncode != 0:
+        reason = (result.stderr.strip() or f"exit code {result.returncode}").split("\n")[0]
+        raise CommandError(f"{' '.join(args[:3])} failed: {reason}")
+    return result.stdout.strip()
+
+
+def is_tree_dirty() -> bool:
+    return run_command(["git", "status", "--porcelain"]) != ""
+
+
+def is_docker_running() -> bool:
+    try:
+        result = subprocess.run(
+            ["docker", "info"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+class Lock:
+    """A directory in the clone's shared .git, holding the pid of the run that owns it."""
+
+    def __init__(self) -> None:
+        git_dir = run_command(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"])
+        self.path = os.path.join(git_dir, LOCK_NAME)
+
+    def acquire(self) -> bool:
+        try:
+            os.mkdir(self.path)
+        except FileExistsError:
+            owner = self.read_owner()
+            if owner is not None and is_alive(owner):
+                print(
+                    f"Refusing to run: another scripts/local-ci (pid {owner}) is running. "
+                    "Wait for it to finish.",
+                    file=sys.stderr,
+                )
+                return False
+            print(
+                f"Taking over the lock of a scripts/local-ci that is gone (pid {owner or 'unknown'}).",
+                file=sys.stderr,
+            )
+            shutil.rmtree(self.path, ignore_errors=True)
+            os.mkdir(self.path)
+        with open(os.path.join(self.path, "pid"), "w") as file:
+            file.write(f"{os.getpid()}\n")
+        return True
+
+    def read_owner(self) -> Optional[int]:
+        try:
+            with open(os.path.join(self.path, "pid")) as file:
+                return int(file.read().strip())
+        except (OSError, ValueError):
+            return None
+
+    def release(self) -> None:
+        shutil.rmtree(self.path, ignore_errors=True)
+
+
+def is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:  # It exists, it just belongs to someone else.
+        return True
+    return True
+
+
+class Run:
+    """One local CI run on one PR's head."""
+
+    def __init__(self, pull_request_number: int, local_ci: LocalCi) -> None:
+        self.number = pull_request_number
+        self.local_ci = local_ci
+        self.repo = ""
+        self.head_sha = ""
+        self.title = ""
+        self.marker = ""
+        self.logs_dir = ""
+        self.worktree = ""
+        # The jobs whose pending status still waits for a result.
+        self.unreported: list[str] = []
+        # The job running now, so a signal can stop all of it.
+        self.running: Optional[subprocess.Popen] = None
+
+    def execute(self) -> int:
+        for signal_number in SIGNAL_MESSAGES:
+            signal.signal(signal_number, raise_stopped)
+        try:
+            return self.run_jobs()
+        except (CommandError, Stopped) as error:
+            return self.abort(str(error))
+        finally:
+            self.remove_worktree()
+
+    def run_jobs(self) -> int:
+        self.read_pull_request()
+        self.logs_dir = tempfile.mkdtemp(prefix=f"local-ci-{self.number}.")
+        self.worktree = os.path.join(self.logs_dir, "head")
+        for job in self.local_ci.jobs:
+            self.unreported.append(job.name)
+            self.post_status(job.name, "pending", "waiting for scripts/local-ci")
+
+        run_command(["git", "fetch", "--quiet", "origin", f"refs/pull/{self.number}/head"])
+        run_command(["git", "worktree", "add", "--quiet", "--detach", self.worktree, self.head_sha])
+        print(f"Running CI for PR #{self.number} on {self.head_sha[:7]}. Logs: {self.logs_dir}", flush=True)
+
+        setup_result = self.run_setup()
+        if setup_result is not None:
+            return setup_result
+        states = [self.run_job(job) for job in self.local_ci.jobs]
+        if "error" in states:
+            return EXIT_ERROR
+        return EXIT_FAILED if "failure" in states else EXIT_PASSED
+
+    def read_pull_request(self) -> None:
+        repo_view = run_command(["gh", "repo", "view", "--json", "nameWithOwner"])
+        self.repo = json.loads(repo_view)["nameWithOwner"]
+        pr_view = run_command(
+            ["gh", "pr", "view", str(self.number), "--repo", self.repo, "--json", "headRefOid,title"]
+        )
+        view = json.loads(pr_view)
+        self.head_sha = view["headRefOid"]
+        self.title = view["title"]
+        host = socket.gethostname().split(".")[0]
+        self.marker = f"local-ci {host} {self.head_sha[:7]}: "
+
+    # Like `npm ci` or `bun install --frozen-lockfile`: every job needs it, so when it fails no job
+    # can run, and every job gets the same result. Status descriptions are short so the log path fits.
+    def run_setup(self) -> Optional[int]:
+        setup = self.local_ci.setup
+        if setup is None:
+            return None
+        log = os.path.join(self.logs_dir, "setup.log")
+        exit_code = self.run_in_worktree(setup, log)
+        if exit_code == 0:
+            return None
+        state = "error" if exit_code == MACHINE_ERROR_EXIT_CODE else "failure"
+        for job in self.local_ci.jobs:
+            self.report(job.name, state, f"setup failed, log: {log}")
+        print(f"setup '{setup}' failed, see {log}", file=sys.stderr)
+        return EXIT_ERROR if state == "error" else EXIT_FAILED
+
+    def run_job(self, job: Job) -> str:
+        log = os.path.join(self.logs_dir, f"{job.name}.log")
+        started = time.monotonic()
+        exit_code = self.run_in_worktree(job.command, log)
+        self.keep_artifacts(job, log)
+        elapsed = round(time.monotonic() - started)
+        if exit_code == 0:
+            state, description = "success", f"success in {elapsed}s, log: {log}"
+        elif exit_code == MACHINE_ERROR_EXIT_CODE:
+            state, description = "error", f"the machine broke (exit {exit_code}), log: {log}"
+        else:
+            state, description = "failure", f"failure in {elapsed}s, log: {log}"
+        print(f"{job.name}: {state} in {elapsed}s", flush=True)
+        self.report(job.name, state, description)
+        return state
+
+    def run_in_worktree(self, command: str, log: str) -> int:
+        """Runs a command in the worktree like the CI runner does, adding its output to the log.
+
+        It runs in its own process group, so a signal can stop it and everything it started.
+        """
+        with open(log, "a") as log_file:
+            self.running = subprocess.Popen(
+                ["/bin/sh", "-c", command], cwd=self.worktree, env=self.job_env(),
+                stdin=subprocess.DEVNULL, stdout=log_file, stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            exit_code = self.running.wait()
+        self.running = None
+        return exit_code
+
+    # CI=true like on a CI runner. The variables in unsetEnv are left out, so a job can't reach, say,
+    # a database from the caller's shell that it wasn't given.
+    def job_env(self) -> dict[str, str]:
+        env = {key: value for key, value in os.environ.items() if key not in self.local_ci.unset_env}
+        return {
+            **env,
+            "CI": "true",
+            **self.local_ci.env,
+            "PR_NUMBER": str(self.number),
+            "PR_TITLE": self.title,
+            "PR_HEAD_SHA": self.head_sha,
+        }
+
+    # The worktree goes away at the end of the run, and with it, say, the traces of failed tests.
+    def keep_artifacts(self, job: Job, log: str) -> None:
+        for artifact in job.artifacts:
+            source = os.path.join(self.worktree, artifact)
+            if not os.path.exists(source):
+                continue
+            kept = os.path.join(self.logs_dir, f"{job.name}-artifacts", artifact)
+            os.makedirs(os.path.dirname(kept), exist_ok=True)
+            if os.path.isdir(source):
+                shutil.copytree(source, kept, symlinks=True)
+            else:
+                shutil.copy2(source, kept)
+            message = f"Kept {artifact}: {kept}"
+            print(message)
+            with open(log, "a") as log_file:
+                log_file.write(message + "\n")
+
+    def post_status(self, context: str, state: str, description: str) -> None:
+        text = fit_description(self.marker, description)
+        run_command(
+            ["gh", "api", "--method", "POST", f"repos/{self.repo}/statuses/{self.head_sha}",
+             "-f", f"context={context}", "-f", f"state={state}", "-f", f"description={text}"]
+        )
+
+    def report(self, job_name: str, state: str, description: str) -> None:
+        self.post_status(job_name, state, description)
+        self.unreported.remove(job_name)
+
+    # A pending status left behind would read as "still running" forever, so a run that stops early
+    # says so on every job that has no result yet.
+    def abort(self, message: str) -> int:
+        for signal_number in SIGNAL_MESSAGES:
+            signal.signal(signal_number, signal.SIG_IGN)
+        self.stop_running_job()
+        print(message, file=sys.stderr)
+        for job_name in list(self.unreported):
+            try:
+                self.report(job_name, "error", message)
+            except CommandError:
+                pass
+        return EXIT_ERROR
+
+    def stop_running_job(self) -> None:
+        if self.running is None:
+            return
+        try:
+            os.killpg(self.running.pid, signal.SIGTERM)
+            self.running.wait(timeout=STOP_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            os.killpg(self.running.pid, signal.SIGKILL)
+            self.running.wait()
+        except ProcessLookupError:
+            pass
+
+    def remove_worktree(self) -> None:
+        if self.worktree and os.path.isdir(self.worktree):
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", self.worktree],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+            )
+
+
+def fit_description(marker: str, description: str) -> str:
+    """Fits a status description into GitHub's limit.
+
+    The marker must stay at the start (merge-gate reads it) and the log path sits at the end, so a
+    description that is too long loses its middle words, not either end.
+    """
+    room = STATUS_DESCRIPTION_LIMIT - len(marker)
+    if len(description) <= room:
+        return marker + description
+    return marker + "..." + description[-(room - 3):]
+
+
+def raise_stopped(signal_number: int, _frame) -> None:
+    raise Stopped(SIGNAL_MESSAGES[signal_number])
+
+
+def refuse(message: str) -> int:
+    print(f"Refusing to run: {message}", file=sys.stderr)
+    return EXIT_ERROR
+
+
+def main(args: list[str]) -> int:
+    if len(args) != 1 or not re.fullmatch(r"[1-9]\d*", args[0]):
+        print(USAGE, file=sys.stderr)
+        return EXIT_ERROR
+    try:
+        config = load_config()
+    except ConfigError as error:
+        print(f"local-ci: {error}", file=sys.stderr)
+        return EXIT_ERROR
+    if config.local_ci is None:
+        print("local-ci: agent-team.json has no localCi section, so there are no jobs", file=sys.stderr)
+        return EXIT_ERROR
+    try:
+        if is_tree_dirty():
+            return refuse("this checkout has uncommitted changes. Commit them or run from a clean checkout.")
+        # Without Docker such a job can't start. That says nothing about the PR, so nothing is posted.
+        if any(job.needs_docker for job in config.local_ci.jobs) and not is_docker_running():
+            return refuse("Docker isn't running (start Docker Desktop or OrbStack).")
+        lock = Lock()
+    except CommandError as error:
+        print(error, file=sys.stderr)
+        return EXIT_ERROR
+    if not lock.acquire():
+        return EXIT_ERROR
+    try:
+        return Run(int(args[0]), config.local_ci).execute()
+    finally:
+        lock.release()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

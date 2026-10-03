@@ -41,13 +41,13 @@ What's inside:
   DevOps, QA, UX, reviewer, researcher), each naming the skills that role uses.
 - `scripts/`: shell scripts for the loop: start a worker or a reviewer, wait for messages, release and
   clean up, merge PRs in a queue, wait for a low load.
-
-You bring your own `scripts/merge-gate` (and `scripts/local-ci` if GitHub Actions can't run). The setup
-phase says what they must do.
+- `templates/scripts/`: a ready merge gate and local CI (Python standard library, `gh`, `git`), with
+  tests. The setup phase copies them into your project. One config file, `agent-team.json`, holds
+  everything project-specific: required checks, local CI jobs, lock files, timeouts.
 
 ### Needs
 
-- Orca with orchestration, `gh`, `git`, `python3`, a POSIX shell.
+- Orca with orchestration, `gh`, `git`, Python 3.9+, a POSIX shell.
 - The role skills it names (`tdd`, `implement`, `pr`, `to-spec`, `to-tickets`, `triage`, `grilling`,
   `research`, `codebase-design`), installed in the project.
 

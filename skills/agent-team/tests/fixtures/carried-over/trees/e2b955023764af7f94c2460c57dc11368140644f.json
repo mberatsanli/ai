@@ -1,0 +1,91 @@
+{
+  "sha": "e2b955023764af7f94c2460c57dc11368140644f",
+  "truncated": false,
+  "tree": [
+    {
+      "path": "bun.lock",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/core/package.json",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/core/src/generated.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/core/test/protocol.test.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/core/tsconfig.build.json",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/core/tsconfig.json",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "schema/api.def",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "schema/package.json",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "schema/scripts/generate.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "schema/src/emit.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "schema/src/generate.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "schema/src/protocol.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "schema/test/fixtures/fixture.def",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "schema/test/generate.test.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "schema/test/generated-types.test.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "schema/tsconfig.json",
+      "mode": "100644",
+      "type": "blob"
+    }
+  ]
+}

@@ -4,8 +4,8 @@
 # SCRUM_ISSUE the issue that holds Daily Scrum comments (optional)
 # REPO        owner/name on GitHub (default: the current repo)
 # GATE        the merge gate command (default: scripts/merge-gate)
-# LOCAL_CI    the local CI command (default: scripts/local-ci; skipped if missing)
-# GATE_ENV    extra env for the gate, like "ONE_LOCAL_CI=1" (optional)
+# LOCAL_CI    the local CI command the gate runs on --update (default: scripts/local-ci)
+# AGENT_TEAM_LOCAL_CI=1 (or =0) turns local CI on --update on (or off), whatever agent-team.json says
 : "${ORCA_RUN:?set ORCA_RUN to the Orca run id (orca orchestration run-list)}"
 ROOT=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
 SKILL_DIR=$(cd "$(dirname "$0")" && pwd)

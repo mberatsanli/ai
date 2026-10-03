@@ -1,0 +1,17 @@
+#!/bin/sh
+# Stands in for Docker in local-ci tests. `docker info` succeeds, or fails like it does when no Docker
+# daemon runs when FAKE_DOCKER_DOWN=1. Every call is appended to $FAKE_WORK_DIR/docker.log.
+set -eu
+echo "$*" >> "$FAKE_WORK_DIR/docker.log"
+case "$1" in
+  info)
+    if [ "${FAKE_DOCKER_DOWN:-}" = "1" ]; then
+      echo "fake docker: Cannot connect to the Docker daemon" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "fake docker: unexpected command: docker $*" >&2
+    exit 64
+    ;;
+esac

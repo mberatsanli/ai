@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""Stands in for the GitHub CLI in local-ci tests.
+
+Reads answer as PR $FAKE_PR_HEAD_SHA titled $FAKE_PR_TITLE, and every posted commit status is appended
+to $FAKE_WORK_DIR/statuses.log as "<sha> <context> <state> <description>". The status POST numbered
+$FAKE_GH_FAILING_STATUS_POST (counting from 1) fails and posts nothing, like a network error.
+"""
+
+import json
+import os
+import sys
+
+WORK_DIR = os.environ["FAKE_WORK_DIR"]
+
+
+def post_status(args: list[str]) -> None:
+    attempts_file = os.path.join(WORK_DIR, "status-posts")
+    with open(attempts_file, "a") as attempts:
+        attempts.write("\n")
+    with open(attempts_file) as attempts:
+        attempt = attempts.read().count("\n")
+    if str(attempt) == os.environ.get("FAKE_GH_FAILING_STATUS_POST"):
+        sys.stderr.write("fake gh: error connecting to api.github.com\n")
+        sys.exit(1)
+    sha = args[0].rsplit("/statuses/", 1)[1]
+    fields = dict(value.split("=", 1) for flag, value in zip(args[1::2], args[2::2]) if flag == "-f")
+    with open(os.path.join(WORK_DIR, "statuses.log"), "a") as log:
+        log.write(f"{sha} {fields['context']} {fields['state']} {fields['description']}\n")
+
+
+args = sys.argv[1:]
+if args[:2] == ["repo", "view"]:
+    print(json.dumps({"nameWithOwner": "octo-org/octo-repo"}))
+elif args[:2] == ["pr", "view"]:
+    print(json.dumps({"headRefOid": os.environ["FAKE_PR_HEAD_SHA"], "title": os.environ["FAKE_PR_TITLE"]}))
+elif args[:3] == ["api", "--method", "POST"]:
+    post_status(args[3:])
+else:
+    sys.stderr.write(f"fake gh: unexpected command: gh {' '.join(args)}\n")
+    sys.exit(64)

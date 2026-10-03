@@ -1,0 +1,732 @@
+#!/usr/bin/env python3
+"""Merges a PR only when CI is green and the newest REVIEW: comment review approves its head, or an
+earlier commit followed only by clean merges from the base branch. See docs/agents/team.md (Merging).
+
+Usage: scripts/merge-gate <PR> [--dry-run | --update]
+
+--update merges the base branch into a PR that is behind, waits for CI on the new head, then decides.
+With local CI on (agent-team.json mergeGate.localCiOnUpdate, or AGENT_TEAM_LOCAL_CI=1), --update runs
+scripts/local-ci on the new head instead of waiting for GitHub Actions, and also on a head that is up to
+date but has no local-ci results yet. AGENT_TEAM_LOCAL_CI=0 turns it off for one run.
+
+Everything project-specific comes from agent-team.json at the repo root (see scripts/README.md).
+MERGE_GATE_POLL_INTERVAL_MS and MERGE_GATE_CI_TIMEOUT_MS override how --update waits, and
+MERGE_GATE_LOCAL_CI swaps the local-ci command, for tests.
+
+Exit codes: 0 merged (or may merge on --dry-run), 1 refused, 2 bad arguments, bad config or gh failed.
+Needs Python 3.9+, gh (logged in) and git. Standard library only.
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from dataclasses import dataclass
+from typing import Callable, Optional, Union
+
+sys.dont_write_bytecode = True  # Keep __pycache__ out of the project's scripts/ folder.
+from agent_team_config import Config, ConfigError, load_config  # noqa: E402
+
+USAGE = "Usage: scripts/merge-gate <PR> [--dry-run | --update]"
+
+# A caller must tell "the gate checked and said no" (refused) from "the gate could not check" (failed).
+EXIT_MERGED = 0
+EXIT_REFUSED = 1
+EXIT_FAILED = 2
+
+# --dry-run promises to change nothing and --update changes the branch, so only one flag is allowed.
+MODES_BY_FLAG = {None: "merge", "--dry-run": "dry-run", "--update": "update"}
+
+POLL_INTERVAL_ENV = "MERGE_GATE_POLL_INTERVAL_MS"
+CI_TIMEOUT_ENV = "MERGE_GATE_CI_TIMEOUT_MS"
+LOCAL_CI_ENV = "AGENT_TEAM_LOCAL_CI"
+LOCAL_CI_COMMAND_ENV = "MERGE_GATE_LOCAL_CI"
+DEFAULT_LOCAL_CI_COMMAND = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local-ci")
+
+PASSING_CONCLUSIONS = {"SUCCESS", "NEUTRAL", "SKIPPED"}
+COMPLETED_STATUS = "COMPLETED"
+# What scripts/local-ci posts when the machine, not the PR, kept a job from running.
+ERROR_CONCLUSION = "ERROR"
+# A commit status (not a check run from Actions) has one state instead of status + conclusion.
+UNFINISHED_STATUS_STATES = {"PENDING", "EXPECTED"}
+# Anyone with the gh login can post a commit status, so a passed one for a required check only counts
+# when scripts/local-ci posted it on this head: its description starts with "local-ci <host> <sha7>: ".
+LOCAL_CI_MARKER = re.compile(r"^local-ci \S+ ([0-9a-f]{7}): ")
+
+STATE_BLOCKERS = {"OPEN": None, "CLOSED": "the PR is closed", "MERGED": "the PR is already merged"}
+
+# The compare status of a commit that the base branch already contains.
+ON_BASE_STATUSES = {"behind", "identical"}
+# GitHub's compare API lists at most this many files and doesn't page them.
+COMPARE_FILE_LIMIT = 300
+# scripts/local-ci exits with 1 when a job failed. Its commit status already says so, and the gate
+# reads it from GitHub like any other check. Any other code means the jobs did not run to the end.
+LOCAL_CI_RAN_EXIT_CODES = {0, 1}
+
+
+def short_sha(sha: str) -> str:
+    return sha[:7]
+
+
+# --- What the gate reads from GitHub ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CheckRun:
+    name: str
+    status: str
+    conclusion: str
+    started_at: str
+    # The description of a commit status, or None for a check run from Actions.
+    status_description: Optional[str]
+
+
+@dataclass(frozen=True)
+class Review:
+    body: str
+    commit_id: Optional[str]
+    submitted_at: str
+
+
+@dataclass(frozen=True)
+class PullRequest:
+    number: int
+    repo: str
+    state: str
+    base_branch: str
+    head_sha: str
+    # How many of the base branch's commits the head doesn't contain yet.
+    commits_behind_base: int
+    checks: tuple[CheckRun, ...]
+    reviews: tuple[Review, ...]
+
+
+@dataclass(frozen=True)
+class Commit:
+    sha: str
+    parent_shas: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ChangedFile:
+    """One file in a PR's own diff: what changed it, and its content and mode at that commit."""
+
+    filename: str
+    previous_filename: Optional[str]  # Where a renamed or copied file came from.
+    status: str
+    blob_sha: Optional[str]
+    mode: Optional[str]  # Like 100644 or 100755; None when the PR deletes the file.
+
+
+@dataclass(frozen=True)
+class OwnChanges:
+    """A PR's own diff at one commit. GitHub lists only part of a very large diff."""
+
+    files: tuple[ChangedFile, ...]
+    is_complete: bool
+
+
+class GhCommandError(Exception):
+    """A gh command that failed. Its message is one line: the command and gh's own reason."""
+
+
+class GitHub:
+    """Every question the gate asks GitHub, through gh. Raises GhCommandError when gh can't answer."""
+
+    def __init__(self) -> None:
+        self.repo = read_gh_json(["repo", "view", "--json", "nameWithOwner"])["nameWithOwner"]
+
+    def read_pull_request(self, number: int) -> PullRequest:
+        view = read_gh_json(
+            ["pr", "view", str(number), "--repo", self.repo, "--json",
+             "state,baseRefName,headRefOid,statusCheckRollup"]
+        )
+        # A merged or closed PR is refused for its state, and GitHub may no longer compare its head.
+        behind = self.read_commits_behind(view) if view["state"] == "OPEN" else 0
+        checks = self.read_checks(view)
+        review_pages = read_gh_json(
+            ["api", f"repos/{self.repo}/pulls/{number}/reviews", "--paginate", "--slurp"]
+        )
+        return PullRequest(
+            number=number,
+            repo=self.repo,
+            state=view["state"],
+            base_branch=view["baseRefName"],
+            head_sha=view["headRefOid"],
+            commits_behind_base=behind,
+            checks=checks,
+            # A pending review has not been submitted yet, so it has no time and doesn't count.
+            reviews=tuple(
+                Review(review["body"], review.get("commit_id"), review["submitted_at"])
+                for page in review_pages
+                for review in page
+                if review.get("submitted_at")
+            ),
+        )
+
+    def read_commits_behind(self, view: dict) -> int:
+        # The compare endpoint also lists every commit and changed file, so keep only the count.
+        url = f"repos/{self.repo}/compare/{view['baseRefName']}...{view['headRefOid']}"
+        return read_gh_json(["api", url, "--jq", "{behind_by}"])["behind_by"]
+
+    def read_checks(self, view: dict) -> tuple[CheckRun, ...]:
+        rollup = view["statusCheckRollup"]
+        has_statuses = any(entry["__typename"] == "StatusContext" for entry in rollup)
+        descriptions = self.read_status_descriptions(view["headRefOid"]) if has_statuses else {}
+        return tuple(to_check_run(entry, descriptions) for entry in rollup)
+
+    # gh's statusCheckRollup leaves the description out, and the gate needs it to tell a status
+    # scripts/local-ci posted from any other. This is the newest status per context.
+    def read_status_descriptions(self, sha: str) -> dict[str, str]:
+        answer = read_gh_json(
+            ["api", f"repos/{self.repo}/commits/{sha}/status?per_page=100", "--jq",
+             "{statuses: [.statuses[] | {context, description}]}"]
+        )
+        return {status["context"]: status.get("description") or "" for status in answer["statuses"]}
+
+    def read_commits(self, number: int) -> list[Commit]:
+        """The PR's commits, oldest first."""
+        pages = read_gh_json(
+            ["api", f"repos/{self.repo}/pulls/{number}/commits", "--paginate", "--slurp"]
+        )
+        return [
+            Commit(commit["sha"], tuple(parent["sha"] for parent in commit["parents"]))
+            for page in pages
+            for commit in page
+        ]
+
+    def is_on_base_branch(self, base_branch: str, sha: str) -> bool:
+        answer = read_gh_json(["api", self.compare_url(base_branch, sha), "--jq", "{status}"])
+        return answer["status"] in ON_BASE_STATUSES
+
+    def read_own_changes(self, base_branch: str, sha: str) -> OwnChanges:
+        """The PR's own diff at this commit, against where it branched off the base branch.
+
+        Three dots compare against the merge base. The compare API has no file modes, so they come
+        from the commit's tree.
+        """
+        answer = read_gh_json(
+            ["api", self.compare_url(base_branch, sha), "--jq",
+             "{files: [.files[] | {filename, previous_filename, status, sha}]}"]
+        )
+        files = answer["files"]
+        if len(files) >= COMPARE_FILE_LIMIT:
+            return OwnChanges(files=(), is_complete=False)
+        tree = read_gh_json(
+            ["api", f"repos/{self.repo}/git/trees/{sha}?recursive=1", "--jq",
+             '{truncated, tree: [.tree[] | select(.type != "tree") | {path, mode}]}']
+        )
+        modes = {entry["path"]: entry["mode"] for entry in tree["tree"]}
+        return OwnChanges(
+            files=tuple(
+                ChangedFile(
+                    filename=file["filename"],
+                    previous_filename=file.get("previous_filename"),
+                    status=file["status"],
+                    blob_sha=file.get("sha"),
+                    mode=modes.get(file["filename"]),
+                )
+                for file in files
+            ),
+            is_complete=not tree["truncated"],
+        )
+
+    def compare_url(self, base_branch: str, sha: str) -> str:
+        return f"repos/{self.repo}/compare/{base_branch}...{sha}"
+
+    def update_branch(self, number: int) -> None:
+        """Merges the base branch into the PR's head on GitHub."""
+        run_gh(["pr", "update-branch", str(number), "--repo", self.repo])
+
+    def squash_merge(self, pull_request: PullRequest) -> None:
+        """Squash-merges the PR and deletes its branch.
+
+        --match-head-commit makes GitHub refuse the merge if a commit was pushed after the gate checked
+        the head. --repo keeps gh from touching local branches, which would fail in a worktree.
+        """
+        run_gh(
+            ["pr", "merge", str(pull_request.number), "--repo", self.repo, "--squash",
+             "--delete-branch", "--match-head-commit", pull_request.head_sha]
+        )
+
+
+def to_check_run(entry: dict, descriptions: dict[str, str]) -> CheckRun:
+    if entry["__typename"] == "CheckRun":
+        return CheckRun(entry["name"], entry["status"], entry["conclusion"], entry["startedAt"], None)
+    name, state = entry["context"], entry["state"]
+    description = descriptions.get(name, "")
+    if state in UNFINISHED_STATUS_STATES:
+        return CheckRun(name, state, "", entry["startedAt"], description)
+    return CheckRun(name, COMPLETED_STATUS, state, entry["startedAt"], description)
+
+
+def read_gh_json(args: list[str]):
+    return json.loads(run_gh(args))
+
+
+def run_gh(args: list[str]) -> str:
+    """Runs gh and returns its output. gh's own output is captured, so only the gate's result shows."""
+    command = "gh " + " ".join(args)
+    try:
+        result = subprocess.run(
+            ["gh", *args], stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False
+        )
+    except OSError as error:  # gh isn't installed, so only the error itself is left to show.
+        raise GhCommandError(f"{command} failed: {error}")
+    if result.returncode != 0:
+        reason = result.stderr.strip() or f"exit code {result.returncode}"
+        raise GhCommandError(f"{command} failed: {first_line(reason)}")
+    return result.stdout
+
+
+def first_line(text: str) -> str:
+    return re.split(r"\r?\n", text, maxsplit=1)[0]
+
+
+# --- The rules -------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Refused:
+    blockers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MayMerge:
+    approved_sha: str  # The commit whose approval lets the PR merge.
+
+
+Decision = Union[Refused, MayMerge]
+
+
+class Rules:
+    """Decides whether the gate may merge a PR, with the project's required checks and review marker."""
+
+    def __init__(self, config: Config, github: GitHub) -> None:
+        self.required_checks = config.required_checks
+        self.review_marker = config.review_marker
+        self.approved_verdict = f"{config.review_marker} APPROVED"
+        self.lock_files = config.carry_over_lock_files
+        self.github = github
+
+    def decide(self, pull_request: PullRequest) -> Decision:
+        state_blocker = STATE_BLOCKERS[pull_request.state]
+        if state_blocker is not None:
+            # A merged or closed PR can't be merged at all, so its checks and reviews don't matter.
+            return Refused((state_blocker,))
+        approved_sha, review_blocker = self.check_review(pull_request)
+        blockers = [
+            *as_list(self.find_base_blocker(pull_request)),
+            *self.find_check_blockers(pull_request),
+            *as_list(review_blocker),
+        ]
+        if blockers or approved_sha is None:
+            return Refused(tuple(blockers))
+        return MayMerge(approved_sha)
+
+    def is_waiting_for_checks(self, pull_request: PullRequest) -> bool:
+        """Whether CI on the head is still busy: a required check hasn't started or hasn't finished."""
+        latest = latest_run_per_check(pull_request.checks)
+        return any(name not in latest for name in self.required_checks) or any(
+            not is_finished(run) for run in latest.values()
+        )
+
+    def has_local_ci_results(self, pull_request: PullRequest) -> bool:
+        """Whether scripts/local-ci posted a result for every required check on this head.
+
+        A pending status isn't a result yet, and an error means the machine broke, so neither counts.
+        """
+        local_ci_runs = latest_run_per_check(
+            [run for run in pull_request.checks if is_local_ci_status_for(run, pull_request.head_sha)]
+        )
+        return all(
+            name in local_ci_runs
+            and is_finished(local_ci_runs[name])
+            and local_ci_runs[name].conclusion != ERROR_CONCLUSION
+            for name in self.required_checks
+        )
+
+    # CI only proves the head as it is. Merging a head that is behind would land a combination of
+    # commits that nobody tested.
+    def find_base_blocker(self, pull_request: PullRequest) -> Optional[str]:
+        behind = pull_request.commits_behind_base
+        if behind == 0:
+            return None
+        commits = "commit" if behind == 1 else "commits"
+        base = pull_request.base_branch
+        return (
+            f"the head is {behind} {commits} behind {base}: run 'scripts/merge-gate "
+            f"{pull_request.number} --update' to merge {base} in, wait for CI and merge"
+        )
+
+    def find_check_blockers(self, pull_request: PullRequest) -> list[str]:
+        head = pull_request.head_sha
+        unproven = [run for run in pull_request.checks if self.is_unproven_pass(run, head)]
+        latest = latest_run_per_check([run for run in pull_request.checks if run not in unproven])
+        not_counted = [
+            f"check {run.name} passed in a commit status without the marker "
+            f"'local-ci <host> {short_sha(head)}: ', so it doesn't count"
+            for run in unproven
+        ]
+        missing = [
+            f"check {name} has not run on {short_sha(head)}"
+            for name in self.required_checks
+            if name not in latest
+        ]
+        not_passed = [blocker for run in latest.values() for blocker in as_list(find_run_blocker(run))]
+        return [*not_counted, *missing, *not_passed]
+
+    def is_unproven_pass(self, run: CheckRun, head_sha: str) -> bool:
+        return (
+            run.status_description is not None
+            and run.name in self.required_checks
+            and run.conclusion in PASSING_CONCLUSIONS
+            and not is_local_ci_status_for(run, head_sha)
+        )
+
+    def check_review(self, pull_request: PullRequest) -> tuple[Optional[str], Optional[str]]:
+        """The commit whose approval counts for the head, or why there is none."""
+        review = self.find_newest_verdict_review(pull_request.reviews)
+        marker = self.review_marker
+        if review is None:
+            return None, f"no review starts with '{marker}'"
+        verdict = first_line(review.body)
+        if verdict != self.approved_verdict:
+            return None, f"the newest {marker} review says '{verdict}', not '{self.approved_verdict}'"
+        if review.commit_id is None:
+            return None, f"the newest {marker} review is not on any commit"
+        if review.commit_id == pull_request.head_sha:
+            return review.commit_id, None
+        carry_over = CarryOver(self.github, self.lock_files, pull_request, review.commit_id)
+        carry_over_blocker = carry_over.find_blocker()
+        if carry_over_blocker is not None:
+            return None, carry_over_blocker
+        return review.commit_id, None
+
+    def find_newest_verdict_review(self, reviews: tuple[Review, ...]) -> Optional[Review]:
+        verdicts = [review for review in reviews if first_line(review.body).startswith(self.review_marker)]
+        # sorted() is stable, so of two reviews with the same time the later listed one wins.
+        newest_last = sorted(verdicts, key=lambda review: review.submitted_at)
+        return newest_last[-1] if newest_last else None
+
+
+def as_list(blocker: Optional[str]) -> list[str]:
+    return [] if blocker is None else [blocker]
+
+
+def is_local_ci_status_for(run: CheckRun, head_sha: str) -> bool:
+    if run.status_description is None:
+        return False
+    match = LOCAL_CI_MARKER.match(run.status_description)
+    return match is not None and match.group(1) == short_sha(head_sha)
+
+
+def latest_run_per_check(checks: list[CheckRun]) -> dict[str, CheckRun]:
+    """A re-run adds another run with the same name; only the newest one counts.
+
+    gh reports a queued run with startedAt 0001-01-01, so a run that has not finished counts as newer
+    than every finished one.
+    """
+    oldest_first = sorted(checks, key=lambda run: (not is_finished(run), run.started_at))
+    return {run.name: run for run in oldest_first}
+
+
+def is_finished(run: CheckRun) -> bool:
+    return run.status == COMPLETED_STATUS
+
+
+def find_run_blocker(run: CheckRun) -> Optional[str]:
+    if not is_finished(run):
+        return f"check {run.name} has not finished ({run.status})"
+    if run.conclusion not in PASSING_CONCLUSIONS:
+        return f"check {run.name} finished with {run.conclusion}"
+    return None
+
+
+class CarryOver:
+    """Whether an approval on an older commit counts for the head.
+
+    It does when every commit after it is a merge from the base branch, and those merges left the PR's
+    own diff as it was. Only read when the approval is on an older commit than the head.
+    """
+
+    def __init__(
+        self, github: GitHub, lock_files: frozenset[str], pull_request: PullRequest, approved_sha: str
+    ) -> None:
+        self.github = github
+        self.lock_files = lock_files
+        self.pull_request = pull_request
+        self.approved_sha = approved_sha
+
+    def find_blocker(self) -> Optional[str]:
+        reason = self.find_commits_blocker() or self.find_own_changes_blocker()
+        if reason is None:
+            return None
+        return (
+            f"the approval on {short_sha(self.approved_sha)} can't carry over to "
+            f"{short_sha(self.pull_request.head_sha)}: {reason}"
+        )
+
+    def find_commits_blocker(self) -> Optional[str]:
+        commits = self.github.read_commits(self.pull_request.number)
+        shas = [commit.sha for commit in commits]
+        if self.approved_sha not in shas:
+            return f"{short_sha(self.approved_sha)} is no longer on the PR"
+        for commit in commits[shas.index(self.approved_sha) + 1:]:
+            blocker = self.find_merge_blocker(commit)
+            if blocker is not None:
+                return blocker
+        return None
+
+    # The first parent is the PR's own line; the others are what the merge brought in.
+    def find_merge_blocker(self, commit: Commit) -> Optional[str]:
+        base = self.pull_request.base_branch
+        merged_shas = commit.parent_shas[1:]
+        if not merged_shas:
+            return f"commit {short_sha(commit.sha)} is not a merge from {base}"
+        for merged_sha in merged_shas:
+            if not self.github.is_on_base_branch(base, merged_sha):
+                return (
+                    f"merge commit {short_sha(commit.sha)} brings in {short_sha(merged_sha)}, "
+                    f"which is not on {base}"
+                )
+        return None
+
+    # A merge that touched a file the PR changes (a conflict resolution, or the base branch changing
+    # the same file) changes what the reviewer read, so the diff must be the same file for file,
+    # content and mode included.
+    def find_own_changes_blocker(self) -> Optional[str]:
+        base = self.pull_request.base_branch
+        head_sha = self.pull_request.head_sha
+        approved = self.github.read_own_changes(base, self.approved_sha)
+        head = self.github.read_own_changes(base, head_sha)
+        for sha, changes in [(self.approved_sha, approved), (head_sha, head)]:
+            if not changes.is_complete:
+                return (
+                    f"GitHub lists only part of the PR's diff at {short_sha(sha)}, "
+                    "so the gate can't compare it"
+                )
+        changed = self.find_different_files(approved.files, head.files)
+        if not changed:
+            return None
+        return f"the merges after it changed {', '.join(changed)}, which the PR changes"
+
+    def find_different_files(
+        self, approved: tuple[ChangedFile, ...], head: tuple[ChangedFile, ...]
+    ) -> list[str]:
+        approved_by_name = self.by_filename(approved)
+        head_by_name = self.by_filename(head)
+        filenames = set(approved_by_name) | set(head_by_name)
+        return sorted(name for name in filenames if approved_by_name.get(name) != head_by_name.get(name))
+
+    # A lock file's content is left out, so it may differ as long as the PR changes it at both commits:
+    # CI installs from it in a mode that fails when it doesn't match the manifests, so a merge that only
+    # re-resolved it needs no second review.
+    def by_filename(self, files: tuple[ChangedFile, ...]) -> dict[str, tuple]:
+        return {
+            file.filename: (
+                file.status,
+                file.previous_filename,
+                None if file.filename in self.lock_files else file.blob_sha,
+                file.mode,
+            )
+            for file in files
+        }
+
+
+# --- The command -----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Options:
+    pull_request_number: int
+    mode: str
+    poll_interval_ms: int
+    ci_timeout_ms: int
+    # The command that runs CI locally on --update, or None to wait for GitHub Actions.
+    local_ci_command: Optional[str]
+
+
+class Gate:
+    def __init__(self, options: Options, rules: Rules, github: GitHub) -> None:
+        self.options = options
+        self.rules = rules
+        self.github = github
+
+    def merge_if_allowed(self) -> int:
+        pull_request = self.read_merge_candidate()
+        if pull_request is None:
+            return EXIT_REFUSED
+        decision = self.rules.decide(pull_request)
+        if isinstance(decision, Refused):
+            reasons = "\n".join(f"  - {blocker}" for blocker in decision.blockers)
+            print(f"Refusing to merge PR #{pull_request.number}:\n{reasons}", file=sys.stderr)
+            return EXIT_REFUSED
+        if decision.approved_sha != pull_request.head_sha:
+            print(
+                f"approval carried over from {short_sha(decision.approved_sha)}: "
+                f"only {pull_request.base_branch}'s changes were merged in"
+            )
+        verdict = (
+            f"every check passed and {short_sha(decision.approved_sha)} has {self.rules.approved_verdict}"
+        )
+        if self.options.mode == "dry-run":
+            print(f"PR #{pull_request.number} can merge: {verdict} (dry run, not merged).")
+            return EXIT_MERGED
+        self.github.squash_merge(pull_request)
+        print(f"Merged PR #{pull_request.number}: {verdict}.")
+        return EXIT_MERGED
+
+    # On --update a PR that is behind gets the base branch merged in first, and the gate decides on
+    # the new head once CI has finished there. With local CI, a head that is up to date but has no
+    # local-ci results gets them first: its Actions runs can't be trusted. None means CI didn't finish.
+    def read_merge_candidate(self) -> Optional[PullRequest]:
+        pull_request = self.github.read_pull_request(self.options.pull_request_number)
+        if self.options.mode != "update" or pull_request.state != "OPEN":
+            return pull_request
+        if pull_request.commits_behind_base > 0:
+            return self.update_then_wait_for_ci(pull_request)
+        if self.options.local_ci_command is not None and not self.rules.has_local_ci_results(pull_request):
+            return self.run_local_ci_on_head(pull_request)
+        return pull_request
+
+    def update_then_wait_for_ci(self, pull_request: PullRequest) -> Optional[PullRequest]:
+        self.github.update_branch(pull_request.number)
+        print(
+            f"Merged {pull_request.base_branch} into PR #{pull_request.number}, "
+            "waiting for CI on the new head.",
+            flush=True,
+        )
+        if self.options.local_ci_command is None:
+            return self.wait_for_actions(pull_request)
+        return self.run_local_ci_on_new_head(pull_request)
+
+    def wait_for_actions(self, previous: PullRequest) -> Optional[PullRequest]:
+        updated = self.poll_until(
+            previous,
+            lambda current: has_new_head(previous, current) and not self.rules.is_waiting_for_checks(current),
+        )
+        if updated is None:
+            self.refuse(previous, f"CI did not finish on the new head within {self.timeout_text()}")
+        return updated
+
+    # local-ci reads the head from GitHub, so it starts only once GitHub shows the merge commit.
+    def run_local_ci_on_new_head(self, previous: PullRequest) -> Optional[PullRequest]:
+        moved = self.poll_until(previous, lambda current: has_new_head(previous, current))
+        if moved is None:
+            self.refuse(previous, f"GitHub did not show the new head within {self.timeout_text()}")
+            return None
+        return self.run_local_ci_on_head(moved)
+
+    def run_local_ci_on_head(self, pull_request: PullRequest) -> Optional[PullRequest]:
+        failure = run_local_ci(self.options.local_ci_command, pull_request.number)
+        if failure is not None:
+            self.refuse(pull_request, failure)
+            return None
+        return self.github.read_pull_request(pull_request.number)
+
+    def poll_until(
+        self, previous: PullRequest, is_done: Callable[[PullRequest], bool]
+    ) -> Optional[PullRequest]:
+        """Reads the PR until is_done says yes. None when that didn't happen within the timeout."""
+        interval_ms = self.options.poll_interval_ms
+        deadline = time.monotonic() + self.options.ci_timeout_ms / 1000
+        while True:
+            current = self.github.read_pull_request(previous.number)
+            if is_done(current):
+                return current
+            if time.monotonic() + interval_ms / 1000 > deadline:
+                return None
+            time.sleep(interval_ms / 1000)
+
+    def refuse(self, pull_request: PullRequest, reason: str) -> None:
+        print(f"Refusing to merge PR #{pull_request.number}: {reason}.", file=sys.stderr)
+
+    def timeout_text(self) -> str:
+        return format_duration(self.options.ci_timeout_ms)
+
+
+# GitHub can take a moment to show the merge commit, and CI on the old head says nothing about it.
+def has_new_head(previous: PullRequest, current: PullRequest) -> bool:
+    return current.head_sha != previous.head_sha
+
+
+def run_local_ci(command: str, pull_request_number: int) -> Optional[str]:
+    """Runs local CI on the PR. Its output goes straight to the terminal, since a run takes minutes.
+
+    Returns why it didn't run to the end, or None when it did.
+    """
+    try:
+        result = subprocess.run([command, str(pull_request_number)], check=False)
+    except OSError as error:
+        return f"{command} could not start: {error}"
+    if result.returncode in LOCAL_CI_RAN_EXIT_CODES:
+        return None
+    return f"{command} stopped with exit code {result.returncode}"
+
+
+def format_duration(milliseconds: int) -> str:
+    if milliseconds % 60_000 == 0:
+        return f"{milliseconds // 60_000} min"
+    if milliseconds % 1000 == 0:
+        return f"{milliseconds // 1000} s"
+    return f"{milliseconds} ms"
+
+
+def parse_options(args: list[str], config: Config) -> Optional[Options]:
+    if not args or not re.fullmatch(r"[1-9]\d*", args[0]):
+        return None
+    flags = args[1:]
+    mode = None if len(flags) > 1 else MODES_BY_FLAG.get(flags[0] if flags else None)
+    # Tests shorten the wait through the environment so they don't depend on real time.
+    interval_ms = parse_milliseconds(os.environ.get(POLL_INTERVAL_ENV), config.poll_interval_ms)
+    timeout_ms = parse_milliseconds(os.environ.get(CI_TIMEOUT_ENV), config.ci_timeout_ms)
+    if mode is None or interval_ms is None or timeout_ms is None:
+        return None
+    return Options(
+        pull_request_number=int(args[0]),
+        mode=mode,
+        poll_interval_ms=interval_ms,
+        ci_timeout_ms=timeout_ms,
+        local_ci_command=(
+            os.environ.get(LOCAL_CI_COMMAND_ENV, DEFAULT_LOCAL_CI_COMMAND) if is_local_ci_on(config) else None
+        ),
+    )
+
+
+# GitHub Actions can be unavailable (billing, outages). Then --update runs the checks on this machine.
+def is_local_ci_on(config: Config) -> bool:
+    override = os.environ.get(LOCAL_CI_ENV)
+    if override in ("0", "1"):
+        return override == "1"
+    return config.local_ci_on_update
+
+
+def parse_milliseconds(value: Optional[str], fallback: int) -> Optional[int]:
+    if value is None:
+        return fallback
+    return int(value) if re.fullmatch(r"[1-9]\d*", value) else None
+
+
+def main(args: list[str]) -> int:
+    try:
+        config = load_config()
+    except ConfigError as error:
+        print(f"merge-gate: {error}", file=sys.stderr)
+        return EXIT_FAILED
+    options = parse_options(args, config)
+    if options is None:
+        print(USAGE, file=sys.stderr)
+        return EXIT_FAILED
+    try:
+        github = GitHub()
+        return Gate(options, Rules(config, github), github).merge_if_allowed()
+    except GhCommandError as error:
+        print(error, file=sys.stderr)
+        return EXIT_FAILED
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

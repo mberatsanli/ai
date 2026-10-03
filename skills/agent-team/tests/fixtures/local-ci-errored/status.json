@@ -1,0 +1,20 @@
+{
+  "statuses": [
+    {
+      "context": "checks",
+      "description": "local-ci coordinator-mac 80f967a: success in 61s, log: /tmp/local-ci-171.Xa81Qz/checks.log"
+    },
+    {
+      "context": "test-postgres",
+      "description": "local-ci coordinator-mac 80f967a: the Postgres container did not start, log: /tmp/local-ci-171.Xa81Qz/test-postgres.log"
+    },
+    {
+      "context": "dev-smoke",
+      "description": "local-ci coordinator-mac 80f967a: the Postgres container did not start, log: /tmp/local-ci-171.Xa81Qz/dev-smoke.log"
+    },
+    {
+      "context": "pr-title",
+      "description": "local-ci coordinator-mac 80f967a: success in 61s, log: /tmp/local-ci-171.Xa81Qz/pr-title.log"
+    }
+  ]
+}

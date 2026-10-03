@@ -1,0 +1,26 @@
+{
+  "$comment": "Settings for scripts/merge-gate and scripts/local-ci. Put this file at the repo root. Fields are explained in scripts/README.md. Keys that start with $ are ignored.",
+  "requiredChecks": ["checks", "e2e", "pr-title"],
+  "reviewMarker": "REVIEW:",
+  "carryOverLockFiles": ["package-lock.json"],
+  "mergeGate": {
+    "pollIntervalSeconds": 15,
+    "ciTimeoutMinutes": 30,
+    "localCiOnUpdate": false
+  },
+  "localCi": {
+    "setup": "npm ci",
+    "env": {},
+    "unsetEnv": ["DATABASE_URL"],
+    "jobs": [
+      { "name": "checks", "command": "scripts/ci/checks.sh" },
+      {
+        "name": "e2e",
+        "command": "scripts/ci/e2e.sh",
+        "needsDocker": true,
+        "artifacts": ["test-results"]
+      },
+      { "name": "pr-title", "command": "scripts/ci/pr-title.sh \"$PR_TITLE\"" }
+    ]
+  }
+}

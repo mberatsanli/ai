@@ -110,7 +110,7 @@ The **merge gate** (`scripts/merge-gate` in your project) is the only way into `
 only when every required check passed on the head and the newest `REVIEW:` comment says `APPROVED` on
 that head. An approval carries over a merge from `main` only when that merge touched none of the PR's
 files. If GitHub Actions can't run, `scripts/local-ci` runs the same jobs on your machine and posts
-commit statuses.
+commit statuses. Both scripts come with this skill; see [Merge gate and local CI](#merge-gate-and-local-ci).
 
 ## Roles
 
@@ -166,7 +166,7 @@ Every agent spec carries [`scripts/rules.txt`](scripts/rules.txt), plus your pro
 | Orca (app + `orca` CLI) | runs every agent as a supervised worker, carries messages | the Orca app; check with `orca --version` |
 | Claude Code | the coordinator and every agent | `npm i -g @anthropic-ai/claude-code` |
 | `gh` (logged in) | issues, labels, milestones, PRs, reviews | `brew install gh && gh auth login` |
-| `git`, `python3`, a POSIX shell | the scripts | usually already there |
+| `git`, Python 3.9+, a POSIX shell | the scripts, the merge gate and local CI | usually already there |
 | Node.js (`npx`) | installs the skills below | `brew install node` |
 | Docker (optional) | if your local CI or e2e runs containers | Docker Desktop or OrbStack |
 | Codex CLI (optional) | the Researcher role | `npm i -g @openai/codex` |
@@ -199,10 +199,45 @@ npx skills add mattpocock/skills \
 | `research` | mattpocock/skills | UX, Researcher |
 | Claude in Chrome (browser tools) | Claude extension | QA, UX, Reviewer for UI |
 
-### In your project
+## Merge gate and local CI
 
-- `scripts/merge-gate` (and `scripts/local-ci` if GitHub Actions can't run). Phase 2 says what they must
-  do; the DevOps agent builds them in wave 0.
+The skill ships both scripts in [`templates/scripts/`](templates/scripts/). They use only the Python
+standard library, `gh` and `git`, so they work in a project in any language. Phase 2 installs them:
+
+```sh
+SKILL=~/.claude/skills/agent-team
+mkdir -p scripts
+for f in merge-gate local-ci agent_team_config.py; do cp "$SKILL/templates/scripts/$f" scripts/; done
+cp "$SKILL/templates/agent-team.json" .
+```
+
+Then edit `agent-team.json` for your project. It is the only place for project-specific settings:
+
+```json
+{
+  "requiredChecks": ["checks", "e2e", "pr-title"],
+  "carryOverLockFiles": ["package-lock.json"],
+  "mergeGate": { "localCiOnUpdate": false },
+  "localCi": {
+    "setup": "npm ci",
+    "jobs": [
+      { "name": "checks", "command": "scripts/ci/checks.sh" },
+      { "name": "e2e", "command": "scripts/ci/e2e.sh", "needsDocker": true },
+      { "name": "pr-title", "command": "scripts/ci/pr-title.sh \"$PR_TITLE\"" }
+    ]
+  }
+}
+```
+
+- `requiredChecks`: your CI job names. The gate refuses while any of them failed, runs or never ran.
+- `localCi.jobs`: the same jobs, run one after another by `scripts/local-ci <PR>`. Each job calls the
+  same script your GitHub Actions job calls, so both prove the same thing.
+- `localCiOnUpdate`: turn it on while GitHub Actions can't run (or use `AGENT_TEAM_LOCAL_CI=1`). Then
+  `scripts/merge-gate <PR> --update` runs local CI itself.
+
+Try it with `scripts/merge-gate <PR> --dry-run`. Every field, the exit codes and the carry-over rule:
+[`templates/scripts/README.md`](templates/scripts/README.md). The repo owner and name come from
+`gh repo view`, the base branch from the PR.
 
 ## Layout
 
@@ -211,5 +246,8 @@ agent-team/
 ├── SKILL.md               entry point: phases, roles, rules
 ├── phases/                1-intake … 6-review-retro, orca.md
 ├── templates/agents/      team, scrum, issue tracker, code standards, roles/
+├── templates/scripts/     merge-gate and local-ci, copied into your project
+├── templates/agent-team.json  their config, copied to your repo root
+├── tests/                 tests for merge-gate and local-ci (python3 -B -m unittest)
 └── scripts/               the coordinator's loop
 ```

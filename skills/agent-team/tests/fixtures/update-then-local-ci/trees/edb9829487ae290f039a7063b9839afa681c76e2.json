@@ -1,0 +1,86 @@
+{
+  "sha": "edb9829487ae290f039a7063b9839afa681c76e2",
+  "truncated": false,
+  "tree": [
+    {
+      "path": "bun.lock",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/package.json",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/src/scan.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/src/fields.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/src/index.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/src/names.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/src/table-schema.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/test/scan-speed.test.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/test/scan.test.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/test/find-item.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/test/memory-db.test.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/test/names-check.test.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/test/sample-schema.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/test/table-schema.test.ts",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/tsconfig.build.json",
+      "mode": "100644",
+      "type": "blob"
+    },
+    {
+      "path": "packages/db/tsconfig.json",
+      "mode": "100644",
+      "type": "blob"
+    }
+  ]
+}

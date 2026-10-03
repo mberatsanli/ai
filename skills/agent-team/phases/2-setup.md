@@ -19,14 +19,31 @@ merge gate and an Orca run.
 4. **Labels.** `gh label create` for: `role:*` (one per role), `wave:0..2`, `points:1,2,3,5,8`,
    `epic`, `type:bug`, `type:ux`, and the triage labels (`needs-triage`, `needs-info`,
    `ready-for-agent`, `ready-for-human`, `wontfix`).
-5. **Wave 0 issues by hand** (or by the PM in phase 3, before anything else): the DevOps work that
-   everything else needs: repo skeleton, strict lint and format, test runner, CI with stable job names,
-   a PR title check, and **`scripts/merge-gate <pr> [--update]`**: merge only when every required check
-   passed on the head and the newest `REVIEW:` comment review says `APPROVED` on the head (or carries
-   over a merge from `main` that touched none of the PR's files). If GitHub Actions can't run, also a
-   `scripts/local-ci <pr>` that runs the same jobs locally and posts commit statuses. Copy and adapt
-   them from a project that has them.
-6. **Orca run.** Load the `orca-cli` skill, then create the run with an objective and note its id
+5. **Merge gate and local CI.** Copy them from this skill; don't write your own:
+   ```sh
+   mkdir -p scripts
+   for f in merge-gate local-ci agent_team_config.py; do
+     cp ~/.claude/skills/agent-team/templates/scripts/$f scripts/
+   done
+   cp ~/.claude/skills/agent-team/templates/agent-team.json .
+   ```
+   Fill in `agent-team.json` (fields: [templates/scripts/README.md](../templates/scripts/README.md)):
+   - `requiredChecks`: the CI job names. Pick them now; they don't change later.
+   - `localCi.jobs`: the same jobs, each calling the same `scripts/ci/<job>.sh` the CI workflow calls.
+     `needsDocker` for jobs that start containers. `localCi.setup` is the install step (`npm ci`,
+     `bun install --frozen-lockfile`, `uv sync --locked`, ...).
+   - `carryOverLockFiles`: the package manager's lock file, if CI installs from it in a strict mode.
+   - `mergeGate.localCiOnUpdate`: `true` if GitHub Actions can't run (billing), else `false`.
+
+   The GitHub Actions workflow runs the same commands: one job per `requiredChecks` name, with the
+   same name, each running its `scripts/ci/<job>.sh` after the setup step. Give the PR title job
+   `PR_TITLE: ${{ github.event.pull_request.title }}`, like local CI does. Commit the scripts and the
+   config. Once the first PR is open, check them with `scripts/merge-gate <PR> --dry-run`.
+6. **Wave 0 issues by hand** (or by the PM in phase 3, before anything else): the DevOps work that
+   everything else needs: repo skeleton, strict lint and format, test runner, the `scripts/ci/*.sh`
+   jobs and the CI workflow with the job names from `agent-team.json`, and a Conventional Commits PR
+   title check.
+7. **Orca run.** Load the `orca-cli` skill, then create the run with an objective and note its id
    (see [orca.md](orca.md#the-run)): `export ORCA_RUN=run_...`.
-7. **Daily Scrum issue.** One issue per sprint where agents comment Done / Next / Blocked by
+8. **Daily Scrum issue.** One issue per sprint where agents comment Done / Next / Blocked by
    (`SCRUM_ISSUE`).

@@ -1,0 +1,48 @@
+{
+  "status": "ahead",
+  "ahead_by": 3,
+  "behind_by": 0,
+  "total_commits": 3,
+  "files": [
+    {
+      "filename": "bun.lock",
+      "status": "modified",
+      "sha": "107d01f3565308cb0648223e71641bb250d709af"
+    },
+    {
+      "filename": "packages/http/package.json",
+      "status": "added",
+      "sha": "5d1f4c0a9e2b7d3f6a8c1e4b7d0f3a6c9e2b5d8f"
+    },
+    {
+      "filename": "packages/http/src/index.ts",
+      "status": "added",
+      "sha": "94104bdf907f13e814ad5ca240a154c5c550f2dc"
+    },
+    {
+      "filename": "packages/http/src/route.ts",
+      "status": "added",
+      "sha": "0369b1502ed827f14d47aa8d561b067dac78ef1a"
+    },
+    {
+      "filename": "packages/http/test/route.test.ts",
+      "status": "added",
+      "sha": "f7882b1f970429241097d9e2456e6c27a0173b36"
+    },
+    {
+      "filename": "packages/http/test/tsconfig.json",
+      "status": "added",
+      "sha": "08de6d95cbb68fe576f5fa543400b722d164348d"
+    },
+    {
+      "filename": "packages/http/tsconfig.build.json",
+      "status": "added",
+      "sha": "118a2a56033aef51e0d752446074e3cb5f8e10b4"
+    },
+    {
+      "filename": "packages/http/tsconfig.json",
+      "status": "added",
+      "sha": "145c88a307d2c093957d4e69b5d6d8abea56811c"
+    }
+  ]
+}

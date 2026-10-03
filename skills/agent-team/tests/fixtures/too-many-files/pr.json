@@ -1,0 +1,47 @@
+{
+  "state": "OPEN",
+  "baseRefName": "main",
+  "headRefOid": "e2b955023764af7f94c2460c57dc11368140644f",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-01T19:54:31Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/octo-org/octo-repo/actions/runs/36917650006/job/110555485224",
+      "name": "checks",
+      "startedAt": "2026-10-01T19:53:55Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-01T19:54:02Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/octo-org/octo-repo/actions/runs/36917650080/job/110555485136",
+      "name": "pr-title",
+      "startedAt": "2026-10-01T19:53:55Z",
+      "status": "COMPLETED",
+      "workflowName": "PR title"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-01T19:54:29Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/octo-org/octo-repo/actions/runs/36917650006/job/110555485748",
+      "name": "test-postgres",
+      "startedAt": "2026-10-01T19:53:56Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-01T19:54:31Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/octo-org/octo-repo/actions/runs/36917650006/job/110555485224",
+      "name": "dev-smoke",
+      "startedAt": "2026-10-01T19:53:55Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    }
+  ]
+}

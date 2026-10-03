@@ -1,0 +1,75 @@
+{
+  "baseRefName": "main",
+  "headRefOid": "80f967ac2f59343468feb4ac15862b4e30a1cc97",
+  "state": "OPEN",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-02T08:21:25Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/octo-org/octo-repo/actions/runs/36983556961/job/110763352661",
+      "name": "checks",
+      "startedAt": "2026-10-02T08:21:23Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-02T08:21:26Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/octo-org/octo-repo/actions/runs/36983556773/job/110763351416",
+      "name": "pr-title",
+      "startedAt": "2026-10-02T08:21:22Z",
+      "status": "COMPLETED",
+      "workflowName": "PR title"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-02T08:21:25Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/octo-org/octo-repo/actions/runs/36983556961/job/110763352463",
+      "name": "test-postgres",
+      "startedAt": "2026-10-02T08:21:23Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-02T08:21:26Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/octo-org/octo-repo/actions/runs/36983556961/job/110763352754",
+      "name": "dev-smoke",
+      "startedAt": "2026-10-02T08:21:23Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "checks",
+      "startedAt": "2026-10-02T12:10:00Z",
+      "state": "SUCCESS",
+      "targetUrl": null
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "test-postgres",
+      "startedAt": "2026-10-02T12:10:00Z",
+      "state": "ERROR",
+      "targetUrl": null
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "dev-smoke",
+      "startedAt": "2026-10-02T12:10:00Z",
+      "state": "ERROR",
+      "targetUrl": null
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "pr-title",
+      "startedAt": "2026-10-02T12:10:00Z",
+      "state": "SUCCESS",
+      "targetUrl": null
+    }
+  ]
+}

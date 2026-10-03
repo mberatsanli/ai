@@ -1,0 +1,5 @@
+{
+  "$comment": "The config of the project the fixtures were recorded on.",
+  "requiredChecks": ["checks", "test-postgres", "pr-title", "dev-smoke"],
+  "carryOverLockFiles": ["bun.lock"]
+}

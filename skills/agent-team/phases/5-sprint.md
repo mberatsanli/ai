@@ -20,7 +20,10 @@ S=~/.claude/skills/agent-team/scripts
    - `REVIEW: CHANGES_REQUESTED`: start a fixer with the same role on the same branch
      (`start-worker.sh <role> <issue> <slug> "Continue branch <b>. Fix the findings in the latest REVIEW
      comment on PR <pr> and reply there."`), then `start-review.sh <pr> <issue> b`.
-6. **Merge**: `sh $S/queue.sh <pr>` in the background, then `sh $S/cleanup-wt.sh <worktree>`.
+6. **Merge**: `sh $S/queue.sh <pr>` in the background, then `sh $S/cleanup-wt.sh <worktree>`. It runs
+   `scripts/merge-gate <pr> --update`. While GitHub Actions can't run, turn on
+   `mergeGate.localCiOnUpdate` in `agent-team.json` (or `export AGENT_TEAM_LOCAL_CI=1`): the gate then
+   runs `scripts/local-ci` on the head itself. Never merge any other way.
 7. **Report** to the stakeholder in a few lines: merged, running, next. Collect non-blocking review notes
    in a list; they become issues in refinement.
 8. Once in a while: `git worktree list`. Anything whose PR is merged or closed goes.
@@ -37,7 +40,10 @@ on each other", "component-based frontend with file suffixes", "close agents aft
 
 ## When local CI fails
 
-- Read the job log (strip colors with `sed 's/\x1b\[[0-9;]*m//g'`).
+- Every commit status names its job's log (strip colors with `sed 's/\x1b\[[0-9;]*m//g'`).
+- `error` (not `failure`) means the machine broke, not the PR: a job exited with 75 (say, its container
+  never got ready) or the run was stopped. Fix the machine and run `queue.sh` again; the gate runs local
+  CI again on its own. With Docker down, local CI posts nothing and says so.
 - A failure in code the PR doesn't touch: run that test alone on `main`. Passes alone, fails in the full
   run: flaky. Retry **once** on a quiet machine. Fails again: file a priority-1 bug and fix it first.
 - Never weaken a test to get a PR in. QA tests stay strict and merge after the bugs they catch are fixed.
