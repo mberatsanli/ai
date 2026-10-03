@@ -11,6 +11,9 @@ Goal: epics and tickets that agents can pick up one by one, covering the whole M
    how to split work: one agent and one PR per issue (half a day to two days), the task spec format,
    labels, `Blocked by`, epics with sub-issues, a QA issue per done-list item, and `needs-info` issues for
    anything unclear in the docs.
+   While it works, it asks about anything the docs don't settle. Answer from the docs, or bring product
+   questions to the stakeholder and reply with their answer ([orca.md](orca.md#asking-the-stakeholder)).
+   Process changes go to it with `send --to dispatch:<id>` instead of a restart.
 3. When it sends `worker_done`, check its report yourself:
    - every done-list item has issues and a QA issue,
    - no two issues in the same wave own the same folders unless chained with `Blocked by`,

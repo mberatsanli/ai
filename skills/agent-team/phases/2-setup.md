@@ -25,7 +25,7 @@ merge gate and an Orca run.
    over a merge from `main` that touched none of the PR's files). If GitHub Actions can't run, also a
    `scripts/local-ci <pr>` that runs the same jobs locally and posts commit statuses. Copy and adapt
    them from a project that has them.
-6. **Orca run.** Load the `orca-cli` skill. Create an orchestration run for the project and note its
-   id: `export ORCA_RUN=run_...`.
+6. **Orca run.** Load the `orca-cli` skill, then create the run with an objective and note its id
+   (see [orca.md](orca.md#the-run)): `export ORCA_RUN=run_...`.
 7. **Daily Scrum issue.** One issue per sprint where agents comment Done / Next / Blocked by
    (`SCRUM_ISSUE`).

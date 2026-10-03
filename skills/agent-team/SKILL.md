@@ -18,6 +18,10 @@ move on. A phase that is already done (its outputs exist) is skipped.
 | 5 | Run the sprint | [phases/5-sprint.md](phases/5-sprint.md) | Merged PRs, closed issues, clean worktrees |
 | 6 | Review and retro | [phases/6-review-retro.md](phases/6-review-retro.md) | `docs/sprints/sprint-N.md`, human review issues, lessons turned into rules |
 
+How agents run and talk to each other in Orca (one worker per role and issue, questions through the
+coordinator, the stakeholder asked only for product decisions): [phases/orca.md](phases/orca.md). Read
+it before phase 3.
+
 After phase 6, go back to phase 4 for the next sprint. Phase 3 (refinement) runs again whenever the
 backlog for the next sprint is thin.
 
@@ -72,6 +76,9 @@ other settings (`SPRINT`, `SCRUM_ISSUE`, `REPO`, `GATE`, `LOCAL_CI`, `GATE_ENV`)
 | `wait-load.sh [max]` | waits until the load average is low enough |
 
 ## Orca gotchas
+
+More in [phases/orca.md](phases/orca.md).
+
 
 - `check --ack <deliveryId>` needs the delivery id; without an ack, the same delivery comes back.
 - Only one `check --wait` may run at a time (`waiter_exists`).

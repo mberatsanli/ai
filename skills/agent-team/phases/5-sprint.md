@@ -25,6 +25,16 @@ S=~/.claude/skills/agent-team/scripts
    in a list; they become issues in refinement.
 8. Once in a while: `git worktree list`. Anything whose PR is merged or closed goes.
 
+## When the stakeholder adds a rule
+
+During a sprint the stakeholder will say things like "clean code by industry standards", "issues depend
+on each other", "component-based frontend with file suffixes", "close agents after merge". Each one:
+
+1. Write it into the docs at once (`CLAUDE.md`, a role file, `code-standards.md`, `rules.txt` or
+   `agent-rules.md`), so every new agent gets it.
+2. Tell the running workers with `send --to dispatch:<id>` if it changes their current work.
+3. Confirm to the stakeholder in one line where it now lives.
+
 ## When local CI fails
 
 - Read the job log (strip colors with `sed 's/\x1b\[[0-9;]*m//g'`).

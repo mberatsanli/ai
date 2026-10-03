@@ -19,7 +19,7 @@ it no longer needs.
 
 What's inside:
 
-- `SKILL.md` and `phases/`: what the coordinator does in each phase.
+- `SKILL.md` and `phases/`: what the coordinator does in each phase, and `phases/orca.md`: how every role runs as its own Orca worker and how questions reach the stakeholder through the coordinator.
 - `templates/agents/`: team, Scrum, issue tracker, code standards and role files (PM, backend, frontend,
   DevOps, QA, UX, reviewer, researcher), each naming the skills that role uses.
 - `scripts/`: shell scripts for the loop: start a worker or a reviewer, wait for messages, release and
