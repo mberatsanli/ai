@@ -10,11 +10,12 @@ merge gate and an Orca run.
    every `<...>`: repo, stack, folders per role, test commands, CI job names. Keep only the roles the
    project needs. Add a `docs/agents/agent-rules.md` for project-only rules every agent must follow
    (it is added to every spec), for example "never use the database `x`".
-3. **Skills for agents.** Install the skills the role files name into the project, so every worker
-   finds them: put them in `.agents/skills/<name>/` and link each from `.claude/skills/<name>`
-   (`ln -s ../../.agents/skills/<name> .claude/skills/<name>`). Copy them from a project that already
-   has them, or install them with the `find-skills` skill. At least: `tdd`, `implement`, `pr`,
-   `to-spec`, `to-tickets`, `triage`, `grilling`, `research`, `codebase-design`.
+3. **Skills.** For you (once per machine): `orca skills install --skill orca-cli --skill orchestration`.
+   For every agent, in the project, so each worktree has them:
+   `npx skills add mattpocock/skills --skill grilling --skill to-spec --skill to-tickets --skill triage
+   --skill tdd --skill implement --skill pr --skill research --skill codebase-design
+   --skill domain-modeling --skill improve-codebase-architecture`. Commit them. Check that
+   `.claude/skills/` lists them (the CLI links them from `.agents/skills/`).
 4. **Labels.** `gh label create` for: `role:*` (one per role), `wave:0..2`, `points:1,2,3,5,8`,
    `epic`, `type:bug`, `type:ux`, and the triage labels (`needs-triage`, `needs-info`,
    `ready-for-agent`, `ready-for-human`, `wontfix`).

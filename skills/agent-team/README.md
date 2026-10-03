@@ -157,13 +157,52 @@ Every agent spec carries [`scripts/rules.txt`](scripts/rules.txt), plus your pro
   an issue.
 - **You decide scope;** irreversible or public actions are always asked first.
 
-## Needs
+## Dependencies
 
-- Orca with orchestration (`orca orchestration ...`)
-- Claude Code, `gh` (logged in), `git`, `python3`, a POSIX shell
-- The role skills above, installed in your project (`.claude/skills/`)
-- A `scripts/merge-gate` in your project (and `scripts/local-ci` if GitHub Actions can't run). Phase 2
-  says what they must do.
+### Tools
+
+| Tool | Why | Get it |
+|---|---|---|
+| Orca (app + `orca` CLI) | runs every agent as a supervised worker, carries messages | the Orca app; check with `orca --version` |
+| Claude Code | the coordinator and every agent | `npm i -g @anthropic-ai/claude-code` |
+| `gh` (logged in) | issues, labels, milestones, PRs, reviews | `brew install gh && gh auth login` |
+| `git`, `python3`, a POSIX shell | the scripts | usually already there |
+| Node.js (`npx`) | installs the skills below | `brew install node` |
+| Docker (optional) | if your local CI or e2e runs containers | Docker Desktop or OrbStack |
+| Codex CLI (optional) | the Researcher role | `npm i -g @openai/codex` |
+
+### Skills
+
+The coordinator needs the Orca skills, installed once for your user:
+
+```sh
+orca skills install --skill orca-cli --skill orchestration
+```
+
+Every agent needs the workflow skills from [mattpocock/skills](https://github.com/mattpocock/skills),
+installed **in the project**, so every worktree has them (phase 2 does this):
+
+```sh
+npx skills add mattpocock/skills \
+  --skill grilling --skill to-spec --skill to-tickets --skill triage \
+  --skill tdd --skill implement --skill pr --skill research \
+  --skill codebase-design --skill domain-modeling --skill improve-codebase-architecture
+```
+
+| Skill | From | Used by |
+|---|---|---|
+| `orca-cli`, `orchestration` | Orca (bundled) | coordinator |
+| `grilling` | mattpocock/skills | coordinator (intake) |
+| `to-spec`, `to-tickets`, `triage`, `domain-modeling` | mattpocock/skills | PM, coordinator |
+| `tdd`, `implement`, `pr`, `codebase-design` | mattpocock/skills | implementers, DevOps, QA |
+| `improve-codebase-architecture` | mattpocock/skills | Reviewer |
+| `research` | mattpocock/skills | UX, Researcher |
+| Claude in Chrome (browser tools) | Claude extension | QA, UX, Reviewer for UI |
+
+### In your project
+
+- `scripts/merge-gate` (and `scripts/local-ci` if GitHub Actions can't run). Phase 2 says what they must
+  do; the DevOps agent builds them in wave 0.
 
 ## Layout
 

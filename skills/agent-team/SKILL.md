@@ -60,6 +60,14 @@ into the project and fills in the project's stack. Each role file names the skil
 - Write to the stakeholder in their language; write code, commits and docs in plain English.
 - No attribution trailers in commits, PR bodies or comments.
 
+## Dependencies
+
+Tools: Orca (app + CLI), Claude Code, `gh`, `git`, `python3`, Node (`npx`); Docker and Codex optional.
+Skills: `orca-cli` and `orchestration` (bundled with Orca), and the role skills from
+`mattpocock/skills`, installed in the project. Exact commands: [README.md](README.md#dependencies) and
+phase 2. Before phase 2 ends, check each one exists (`orca --version`, `gh auth status`,
+`ls .claude/skills`); install what's missing with the stakeholder's okay.
+
 ## Scripts
 
 [scripts/](scripts/) runs the loop. Set `ORCA_RUN` once; see [scripts/env.sh](scripts/env.sh) for the
