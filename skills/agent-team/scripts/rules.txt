@@ -2,3 +2,5 @@ Keep the machine quiet (the stakeholder works on it): never run test suites, bui
 Never pkill -f by script name; stop only processes you started, by PID or by a pattern with your own worktree path.
 Never use the stakeholder's own dev database or the main checkout's .env for manual or browser checks: make your own and remove it when you finish.
 No attribution trailers or tool footers in commits, PR bodies or comments.
+Keep main runnable: never leave a change that breaks the README's run steps. If main is red, say so at once.
+Before you tell anyone a command to run, run it yourself on the current main and check it works.

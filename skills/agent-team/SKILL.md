@@ -50,6 +50,8 @@ into the project and fills in the project's stack. Each role file names the skil
   issue number.
 - **Merge only through the merge gate**, after a `REVIEW: APPROVED` on the head and green CI.
 - **Red `main` stops the line.** A failing or flaky test on `main` becomes a priority-1 bug and goes first.
+  Before you give the stakeholder a command to run (start the app, run a demo), run it on `main` yourself.
+- **Stop processes by PID**, never `pkill -f` by script name: other worktrees run the same dev servers.
 - **Never weaken a test** (`skip`, `test.fail()`, bigger timeouts without a reason) to get a PR in.
 - **Clean up at once.** Release a worker when it sends `worker_done`; remove its worktree when its PR
   merges. No idle agent, no stale worktree.

@@ -35,15 +35,18 @@ merge gate and an Orca run.
    - `carryOverLockFiles`: the package manager's lock file, if CI installs from it in a strict mode.
    - `mergeGate.localCiOnUpdate`: `true` if GitHub Actions can't run (billing), else `false`.
 
-   The GitHub Actions workflow runs the same commands: one job per `requiredChecks` name, with the
-   same name, each running its `scripts/ci/<job>.sh` after the setup step. Give the PR title job
-   `PR_TITLE: ${{ github.event.pull_request.title }}`, like local CI does. Commit the scripts and the
-   config. Once the first PR is open, check them with `scripts/merge-gate <PR> --dry-run`.
+   **CI workflow and jobs:** copy [../templates/github/workflows/](../templates/github/workflows/) to
+   `.github/workflows/` and [../templates/scripts/ci/](../templates/scripts/ci/) (`checks.sh`,
+   `pr-title.sh`, `dev-smoke.sh`) to `scripts/ci/`, then put your commands in them. One job per
+   `requiredChecks` name, with the same name, each running its `scripts/ci/<job>.sh` after the setup
+   step, so Actions and local CI run the same thing. `pr-title.sh` reads `PR_TITLE` (local CI sets it)
+   or its first argument. `dev-smoke.sh` runs the README's start command and checks the app answers.
+   Pin actions to commit SHAs. Commit the scripts and the config. Once the first PR is open, check them with `scripts/merge-gate <PR> --dry-run`.
 6. **Wave 0 issues by hand** (or by the PM in phase 3, before anything else): the DevOps work that
    everything else needs: repo skeleton, strict lint and format, test runner, the `scripts/ci/*.sh`
-   jobs and the CI workflow with the job names from `agent-team.json`, and a Conventional Commits PR
-   title check.
+   jobs filled in for the real stack.
 7. **Orca run.** Load the `orca-cli` skill, then create the run with an objective and note its id
    (see [orca.md](orca.md#the-run)): `export ORCA_RUN=run_...`.
-8. **Daily Scrum issue.** One issue per sprint where agents comment Done / Next / Blocked by
-   (`SCRUM_ISSUE`).
+8. **Daily Scrum issue.** One issue per sprint, from
+   [../templates/docs/daily-scrum-issue.md](../templates/docs/daily-scrum-issue.md). Its number is
+   `SCRUM_ISSUE`.

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Cancel superseded runs on PRs only; every commit on main keeps its own run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+# scripts/merge-gate looks for these job names (requiredChecks in agent-team.json). Rename them only
+# together. Each job's commands live in scripts/ci, so scripts/local-ci runs exactly the same ones.
+# Give every job a timeout of 2-3x its usual duration, so a hung step fails in minutes.
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4 # pin to a commit SHA
+      # Set up your toolchain here (setup-node, setup-python, setup-go, ...).
+      - run: npm ci
+      - run: scripts/ci/checks.sh
+
+  dev-smoke:
+    name: dev-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4 # pin to a commit SHA
+      - run: npm ci
+      - run: scripts/ci/dev-smoke.sh

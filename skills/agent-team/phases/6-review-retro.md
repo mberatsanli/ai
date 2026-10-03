@@ -5,8 +5,9 @@ Goal: show what was built, learn from the stakeholder's eyes, and turn lessons i
 ## Sprint review
 
 1. A QA agent demos the increment against the Sprint Goal in the real app (an issue "Sprint N demo").
-2. Write `docs/sprints/sprint-N.md`: goal, what's done, what isn't and why, points planned vs done,
-   PR links. Send the stakeholder the short version.
+2. Write `docs/sprints/sprint-N.md` from
+   [../templates/docs/sprint-report.md](../templates/docs/sprint-report.md): goal, what's done, what
+   isn't and why, points planned vs done, PR links. Send the stakeholder the short version.
 
 ## Human review (freeze)
 

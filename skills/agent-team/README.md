@@ -248,6 +248,9 @@ agent-team/
 ├── templates/agents/      team, scrum, issue tracker, code standards, roles/
 ├── templates/scripts/     merge-gate and local-ci, copied into your project
 ├── templates/agent-team.json  their config, copied to your repo root
+├── templates/scripts/ci/  checks, pr-title, dev-smoke job scripts
+├── templates/github/      CI and PR title workflows
+├── templates/docs/        sprint report and Daily Scrum issue
 ├── tests/                 tests for merge-gate and local-ci (python3 -B -m unittest)
 └── scripts/               the coordinator's loop
 ```
