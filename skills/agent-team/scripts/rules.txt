@@ -1,0 +1,4 @@
+Keep the machine quiet (the stakeholder works on it): never run test suites, builds or e2e in parallel, and run the full suite at most once at the end. Never create artificial CPU load (stress tools, CPU burner loops) to prove timing; reason about it or use a tiny scale instead.
+Never pkill -f by script name; stop only processes you started, by PID or by a pattern with your own worktree path.
+Never use the stakeholder's own dev database or the main checkout's .env for manual or browser checks: make your own and remove it when you finish.
+No attribution trailers or tool footers in commits, PR bodies or comments.
