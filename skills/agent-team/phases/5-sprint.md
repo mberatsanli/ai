@@ -44,8 +44,12 @@ on each other", "component-based frontend with file suffixes", "close agents aft
 - `error` (not `failure`) means the machine broke, not the PR: a job exited with 75 (say, its container
   never got ready) or the run was stopped. Fix the machine and run `queue.sh` again; the gate runs local
   CI again on its own. With Docker down, local CI posts nothing and says so.
-- A failure in code the PR doesn't touch: run that test alone on `main`. Passes alone, fails in the full
-  run: flaky. Retry **once** on a quiet machine. Fails again: file a priority-1 bug and fix it first.
+- `error` with "slept": the machine went to sleep during the job. Keep it awake and run `queue.sh` again.
+- A failure in a test the PR doesn't touch counts as flaky only after two checks: the test doesn't run
+  code the PR changed (a shared helper can break it), and it passes alone on `main`. Otherwise it goes
+  back to the author. Flaky: file a priority-1 bug at once, then retry **once** on a quiet machine with
+  `RERUN=1 sh $S/queue.sh <pr>` (plain `queue.sh` re-reads the old failure). Fails again: fix the bug
+  first, then retry.
 - Never weaken a test to get a PR in. QA tests stay strict and merge after the bugs they catch are fixed.
 
 ## When the machine gets loud

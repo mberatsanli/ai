@@ -14,7 +14,9 @@ keeps every log next to it. One run at a time: a second one exits with 2 while t
 
 A broken machine is not a broken PR. local-ci refuses to start, and posts nothing, when a job needs
 Docker and Docker isn't running. A job that exits with 75 (EX_TEMPFAIL: "the machine broke, try again")
-is posted as `error`, not `failure`, and merge-gate --update runs local CI again for it.
+is posted as `error`, not `failure`, and merge-gate --update runs local CI again for it. So is a job
+that failed while the machine slept: its timeouts fired on wake-up, not because of the PR. On macOS
+local-ci keeps the machine from idle sleep while it runs (caffeinate).
 
 Exit codes: 0 every job passed, 1 a job failed, 2 bad arguments, a bad config, a dirty working tree,
 Docker not running, another run holds the lock, a signal, a job errored, or a gh or git command failed.
@@ -44,6 +46,11 @@ EXIT_ERROR = 2
 
 # What a job exits with when the machine, not the PR, kept it from running (sysexits.h EX_TEMPFAIL).
 MACHINE_ERROR_EXIT_CODE = 75
+# The wall clock runs on while the machine sleeps; the monotonic clock doesn't. A gap this big means a
+# sleep, not a slow job.
+SLEEP_TOLERANCE_SECONDS = 60
+# Tests pretend the machine slept this long during every job.
+TEST_SLEPT_SECONDS_ENV = "LOCAL_CI_TEST_SLEPT_SECONDS"
 # GitHub refuses a commit status whose description is longer than this.
 STATUS_DESCRIPTION_LIMIT = 140
 # Shared by every worktree of this clone, so two runs never compete for the machine.
@@ -222,13 +229,18 @@ class Run:
     def run_job(self, job: Job) -> str:
         log = os.path.join(self.logs_dir, f"{job.name}.log")
         started = time.monotonic()
+        wall_started = time.time()
         exit_code = self.run_in_worktree(job.command, log)
         self.keep_artifacts(job, log)
         elapsed = round(time.monotonic() - started)
+        slept = slept_seconds(wall_started, started)
         if exit_code == 0:
             state, description = "success", f"success in {elapsed}s, log: {log}"
         elif exit_code == MACHINE_ERROR_EXIT_CODE:
             state, description = "error", f"the machine broke (exit {exit_code}), log: {log}"
+        elif slept > SLEEP_TOLERANCE_SECONDS:
+            state, description = "error", f"slept {slept}s, log: {log}"
+            print(f"{job.name}: failed after the machine slept {slept}s, so it counts as an error", flush=True)
         else:
             state, description = "failure", f"failure in {elapsed}s, log: {log}"
         print(f"{job.name}: {state} in {elapsed}s", flush=True)
@@ -325,6 +337,22 @@ class Run:
             )
 
 
+def slept_seconds(wall_started: float, monotonic_started: float) -> int:
+    wall = time.time() - wall_started
+    monotonic = time.monotonic() - monotonic_started
+    return round(wall - monotonic) + int(os.environ.get(TEST_SLEPT_SECONDS_ENV, "0"))
+
+
+# caffeinate -i -w <pid> holds off idle sleep until this process ends. A closed lid still sleeps; the
+# check in run_job catches that.
+def keep_awake() -> None:
+    if sys.platform == "darwin" and shutil.which("caffeinate"):
+        subprocess.Popen(
+            ["caffeinate", "-i", "-w", str(os.getpid())],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+
 def fit_description(marker: str, description: str) -> str:
     """Fits a status description into GitHub's limit.
 
@@ -371,6 +399,7 @@ def main(args: list[str]) -> int:
     if not lock.acquire():
         return EXIT_ERROR
     try:
+        keep_awake()
         return Run(int(args[0]), config.local_ci).execute()
     finally:
         lock.release()

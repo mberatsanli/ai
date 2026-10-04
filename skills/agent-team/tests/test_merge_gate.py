@@ -24,7 +24,7 @@ FIXTURES_CONFIG = os.path.join(TESTS_DIR, "agent-team.json")
 FAST_POLLING = {"MERGE_GATE_POLL_INTERVAL_MS": "1", "MERGE_GATE_CI_TIMEOUT_MS": "2000"}
 LOCAL_CI_ON = {**FAST_POLLING, "AGENT_TEAM_LOCAL_CI": "1", "MERGE_GATE_LOCAL_CI": FAKE_LOCAL_CI}
 
-USAGE = "Usage: scripts/merge-gate <PR> [--dry-run | --update]"
+USAGE = "Usage: scripts/merge-gate <PR> [--dry-run | --update | --rerun]"
 REQUIRED_CHECKS = ["checks", "test-postgres", "pr-title", "dev-smoke"]
 
 # The recorded heads the gate merges.
@@ -419,6 +419,20 @@ class UpdateTests(MergeGateTestCase):
         self.assertEqual(run.exit_code, 0, run.output)
         self.assertEqual(run.write_commands, [merge_command(171, HEAD_171)])
 
+    def test_rerun_runs_local_ci_again_on_a_head_whose_local_ci_run_failed(self):
+        run = self.run_gate("status-failed", ["171", "--rerun"], LOCAL_CI_ON)
+
+        self.assertEqual(run.write_commands[0], "local-ci 171", run.output)
+
+    def test_rerun_refuses_to_start_without_local_ci(self):
+        env = {**FAST_POLLING, "AGENT_TEAM_LOCAL_CI": "0", "MERGE_GATE_LOCAL_CI": FAKE_LOCAL_CI}
+
+        run = self.run_gate("status-failed", ["171", "--rerun"], env)
+
+        self.assertEqual(run.exit_code, 2, run.output)
+        self.assertEqual(run.write_commands, [])
+        self.assertIn("--rerun needs local CI", run.output)
+
     def test_without_local_ci_refuses_when_actions_failed_on_the_new_head(self):
         env = {**FAST_POLLING, "MERGE_GATE_LOCAL_CI": FAKE_LOCAL_CI}
 
@@ -464,7 +478,7 @@ class FailureTests(MergeGateTestCase):
         self.assertNotIn("Merged PR", run.output)
 
     def test_exits_with_usage_help_when_the_arguments_are_wrong(self):
-        for args in [[], ["abc"], ["12", "--force"], ["12", "--dry-run", "--update"]]:
+        for args in [[], ["abc"], ["12", "--force"], ["12", "--dry-run", "--update"], ["12", "--update", "--rerun"]]:
             with self.subTest(args=args):
                 run = self.run_gate("approved-on-head", args)
 

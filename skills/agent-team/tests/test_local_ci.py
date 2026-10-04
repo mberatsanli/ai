@@ -265,6 +265,16 @@ class JobTests(LocalCiTestCase):
         self.assertEqual(read_file(os.path.join(kept_dir, "smoke-signs-in", "trace.zip")), "a trace\n")
         self.assertEqual(read_file(os.path.join(kept_dir, "stack.log")), "the stack's log\n")
 
+    def test_marks_a_failed_job_as_errored_when_the_machine_slept_during_it(self):
+        run = self.run_local_ci(env={"LOCAL_CI_TEST_SLEPT_SECONDS": "600"})
+
+        self.assertEqual(run.exit_code, 2, run.output)
+        self.assertEqual(
+            run.results(),
+            ["checks success", "test-postgres success", "dev-smoke error", "pr-title success", "e2e success"],
+        )
+        self.assertIn("dev-smoke: failed after the machine slept 600s", run.output)
+
     def test_marks_a_job_as_errored_not_failed_when_it_exits_with_75(self):
         self.push_pull_request_head({**JOB_SCRIPTS, "test-postgres.sh": MACHINE_ERROR_SCRIPT})
 

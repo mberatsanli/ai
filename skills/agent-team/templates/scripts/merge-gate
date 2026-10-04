@@ -2,12 +2,14 @@
 """Merges a PR only when CI is green and the newest REVIEW: comment review approves its head, or an
 earlier commit followed only by clean merges from the base branch. See docs/agents/team.md (Merging).
 
-Usage: scripts/merge-gate <PR> [--dry-run | --update]
+Usage: scripts/merge-gate <PR> [--dry-run | --update | --rerun]
 
 --update merges the base branch into a PR that is behind, waits for CI on the new head, then decides.
 With local CI on (agent-team.json mergeGate.localCiOnUpdate, or AGENT_TEAM_LOCAL_CI=1), --update runs
 scripts/local-ci on the new head instead of waiting for GitHub Actions, and also on a head that is up to
 date but has no local-ci results yet. AGENT_TEAM_LOCAL_CI=0 turns it off for one run.
+--rerun is --update that runs local CI on the head even when it already has results, for a run that
+failed on a flaky test or a machine problem. It needs local CI on.
 
 Everything project-specific comes from agent-team.json at the repo root (see scripts/README.md).
 MERGE_GATE_POLL_INTERVAL_MS and MERGE_GATE_CI_TIMEOUT_MS override how --update waits, and
@@ -29,7 +31,7 @@ from typing import Callable, Optional, Union
 sys.dont_write_bytecode = True  # Keep __pycache__ out of the project's scripts/ folder.
 from agent_team_config import Config, ConfigError, load_config  # noqa: E402
 
-USAGE = "Usage: scripts/merge-gate <PR> [--dry-run | --update]"
+USAGE = "Usage: scripts/merge-gate <PR> [--dry-run | --update | --rerun]"
 
 # A caller must tell "the gate checked and said no" (refused) from "the gate could not check" (failed).
 EXIT_MERGED = 0
@@ -37,7 +39,7 @@ EXIT_REFUSED = 1
 EXIT_FAILED = 2
 
 # --dry-run promises to change nothing and --update changes the branch, so only one flag is allowed.
-MODES_BY_FLAG = {None: "merge", "--dry-run": "dry-run", "--update": "update"}
+MODES_BY_FLAG = {None: "merge", "--dry-run": "dry-run", "--update": "update", "--rerun": "rerun"}
 
 POLL_INTERVAL_ENV = "MERGE_GATE_POLL_INTERVAL_MS"
 CI_TIMEOUT_ENV = "MERGE_GATE_CI_TIMEOUT_MS"
@@ -581,14 +583,17 @@ class Gate:
 
     # On --update a PR that is behind gets the base branch merged in first, and the gate decides on
     # the new head once CI has finished there. With local CI, a head that is up to date but has no
-    # local-ci results gets them first: its Actions runs can't be trusted. None means CI didn't finish.
+    # local-ci results gets them first: its Actions runs can't be trusted. --rerun runs local CI on an
+    # up-to-date head even when it has results. None means CI didn't finish.
     def read_merge_candidate(self) -> Optional[PullRequest]:
         pull_request = self.github.read_pull_request(self.options.pull_request_number)
-        if self.options.mode != "update" or pull_request.state != "OPEN":
+        if self.options.mode not in ("update", "rerun") or pull_request.state != "OPEN":
             return pull_request
         if pull_request.commits_behind_base > 0:
             return self.update_then_wait_for_ci(pull_request)
-        if self.options.local_ci_command is not None and not self.rules.has_local_ci_results(pull_request):
+        if self.options.local_ci_command is not None and (
+            self.options.mode == "rerun" or not self.rules.has_local_ci_results(pull_request)
+        ):
             return self.run_local_ci_on_head(pull_request)
         return pull_request
 
@@ -719,6 +724,12 @@ def main(args: list[str]) -> int:
     options = parse_options(args, config)
     if options is None:
         print(USAGE, file=sys.stderr)
+        return EXIT_FAILED
+    if options.mode == "rerun" and options.local_ci_command is None:
+        print(
+            f"merge-gate: --rerun needs local CI ({LOCAL_CI_ENV}=1 or mergeGate.localCiOnUpdate)",
+            file=sys.stderr,
+        )
         return EXIT_FAILED
     try:
         github = GitHub()

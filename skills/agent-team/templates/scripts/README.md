@@ -17,6 +17,7 @@ They need Python 3.9 or newer, `git`, and `gh` logged in to the repo. No other p
 scripts/merge-gate <PR>             # merge if allowed
 scripts/merge-gate <PR> --dry-run   # only say if it would merge
 scripts/merge-gate <PR> --update    # bring the PR up to date, wait for CI, then merge if allowed
+scripts/merge-gate <PR> --rerun     # like --update, but run local CI again even if the head has results
 ```
 
 It squash-merges a PR and deletes its branch only when all of this is true:
@@ -40,6 +41,10 @@ PR's files. So does a PR with 300 or more changed files, because GitHub lists on
 `ciTimeoutMinutes`), then decides. With local CI on, it runs `scripts/local-ci` on the new head
 instead of waiting for Actions. It also runs it on a head that is up to date but has no local-ci
 results yet, or whose last run errored. So one command is enough.
+
+`--rerun` is `--update` that runs local CI on the head even when it already has results, for the one
+retry of a run that failed on a flaky test. `--update` alone re-reads the old `failure` and refuses
+again. It needs local CI on.
 
 GitHub merges only if the head is still the one the gate checked (`--match-head-commit`).
 
@@ -67,6 +72,9 @@ that the output and each status name.
 - A job that exits with **75** says "this machine broke, not the PR" (for example its database
   container never got ready). It is posted as `error`, not `failure`, and `merge-gate --update` runs
   local CI again.
+- A job that fails while the machine slept (the wall clock moved more than 60 s past the monotonic
+  clock) is posted as `error` too: its timeouts fired on wake-up. On macOS, local-ci holds off idle
+  sleep with `caffeinate` while it runs; a closed lid still sleeps.
 - It refuses to start, and posts nothing, when the checkout has uncommitted changes, when a job has
   `needsDocker` and Docker isn't running, or when another run holds the lock (one run at a time per
   clone).
