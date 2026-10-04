@@ -1,6 +1,6 @@
 #!/bin/sh
 # usage: wait-msg.sh — blocks until a worker sends something other than a heartbeat, prints it.
-# Heartbeats are acked on the way. Run it in the background; only one waiter may exist at a time.
+# Heartbeats and rejected late worker_done notices are acked on the way. Run it in the background; only one waiter may exist at a time.
 # Ack the printed delivery yourself after reading it: orca orchestration check --run $ORCA_RUN --ack <deliveryId>
 . "$(dirname "$0")/env.sh"
 while :; do
@@ -11,7 +11,9 @@ try: d=json.loads(sys.stdin.read(),strict=False)['result']
 except Exception: print('ERR'); sys.exit()
 m=d.get('messages') or []
 if not m: print('NONE'); sys.exit()
-if all(x.get('type')=='heartbeat' for x in m): print('HB', d.get('deliveryId')); sys.exit()
+# Heartbeats, and a late worker_done that Orca rejected because the worker was already released, need no action.
+noise=lambda x: x.get('type')=='heartbeat' or (x.get('subject') or '').startswith('Rejected worker_done')
+if all(noise(x) for x in m): print('HB', d.get('deliveryId')); sys.exit()
 print('MSG', d.get('deliveryId'))")
   case "$R" in
     HB*) orca orchestration check --run "$ORCA_RUN" --ack "${R#HB }" --json >/dev/null 2>&1 ;;
