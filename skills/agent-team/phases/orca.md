@@ -30,7 +30,7 @@ always ack the delivery (`check --ack <deliveryId>`).
 | Message | What you do |
 |---|---|
 | `heartbeat` | Nothing; `wait-msg.sh` acks it. |
-| `ask` (a question; the worker is blocked) | Answer with `orca orchestration reply --run $ORCA_RUN --id <msg id> --body "..."`. Answer from the docs and decisions yourself. Only product or scope questions go to the stakeholder. |
+| `ask` (a question; the worker is blocked) | Answer with `orca orchestration reply --run $ORCA_RUN --id <msg id> --body "..."`, with the message `id` (`msg_...`), not the `deliveryId`. Answer from the docs and decisions yourself. Only product or scope questions go to the stakeholder. |
 | `worker_done` | Release the worker, then review, merge or start the next step. |
 | a failure or escalation | Read it, decide, reply or restart. |
 
