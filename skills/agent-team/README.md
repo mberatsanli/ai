@@ -140,6 +140,7 @@ All in [`scripts/`](scripts/). They need `ORCA_RUN`; the rest has defaults (see 
 | `finish-worker.sh <dispatch> [rm]` | releases a worker, kills its leftovers, closes its terminals; `rm` removes the worktree |
 | `cleanup-wt.sh <name>...` | removes finished worktrees and their branches |
 | `queue.sh <pr>...` | merges PRs one by one through local CI and the merge gate, pulls `main` |
+| `review-merge.sh <pr> <issue> <worktree> [round] [-- <next worker args>]` | review, merge on approval, clean up and start the next worker in one go; stops on a question or CHANGES_REQUESTED (`RESUME=1` continues after you answer) |
 | `wait-load.sh [max]` | waits until the machine's load average is low enough |
 
 Every agent spec carries [`scripts/rules.txt`](scripts/rules.txt), plus your project's

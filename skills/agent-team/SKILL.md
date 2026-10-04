@@ -91,6 +91,7 @@ other settings (`SPRINT`, `SCRUM_ISSUE`, `REPO`, `GATE`, `LOCAL_CI`, `AGENT_TEAM
 | `finish-worker.sh <dispatch> [rm]` | releases a worker, closes its terminals, `rm` removes the worktree |
 | `cleanup-wt.sh <name>...` | removes finished worktrees and branches |
 | `queue.sh <pr>...` | merges PRs in turn through local CI and the merge gate |
+| `review-merge.sh <pr> <issue> <worktree> [round] [-- <next worker args>]` | reviews, merges on approval, cleans up, starts the next worker; stops on anything else (`RESUME=1` after answering a question) |
 | `wait-load.sh [max]` | waits until the load average is low enough |
 
 ## Orca gotchas

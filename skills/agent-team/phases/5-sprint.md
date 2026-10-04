@@ -28,6 +28,12 @@ S=~/.claude/skills/agent-team/scripts
    in a list; they become issues in refinement.
 8. Once in a while: `git worktree list`. Anything whose PR is merged or closed goes.
 
+**Shortcut for steps 5, 6 and the next 2:** after releasing a worker, run
+`sh $S/review-merge.sh <pr> <issue> <worktree> -- <role> <next issue> <slug> ["extra"]` in the
+background. It reviews, merges on `REVIEW: APPROVED`, cleans up, starts the next worker and waits for its
+message. On a question or `CHANGES_REQUESTED` it stops and prints the message: answer the question and
+run it again with `RESUME=1`, or start a fixer as in step 5.
+
 ## When the stakeholder adds a rule
 
 During a sprint the stakeholder will say things like "clean code by industry standards", "issues depend
