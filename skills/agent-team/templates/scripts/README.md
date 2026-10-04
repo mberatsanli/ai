@@ -17,7 +17,7 @@ They need Python 3.9 or newer, `git`, and `gh` logged in to the repo. No other p
 scripts/merge-gate <PR>             # merge if allowed
 scripts/merge-gate <PR> --dry-run   # only say if it would merge
 scripts/merge-gate <PR> --update    # bring the PR up to date, wait for CI, then merge if allowed
-scripts/merge-gate <PR> --rerun     # like --update, but run local CI again even if the head has results
+scripts/merge-gate <PR> [--update] --rerun  # like --update, but run local CI again even if the head has results
 ```
 
 It squash-merges a PR and deletes its branch only when all of this is true:

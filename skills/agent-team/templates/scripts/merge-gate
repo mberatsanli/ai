@@ -2,7 +2,7 @@
 """Merges a PR only when CI is green and the newest REVIEW: comment review approves its head, or an
 earlier commit followed only by clean merges from the base branch. See docs/agents/team.md (Merging).
 
-Usage: scripts/merge-gate <PR> [--dry-run | --update | --rerun]
+Usage: scripts/merge-gate <PR> [--dry-run | --update | [--update] --rerun]
 
 --update merges the base branch into a PR that is behind, waits for CI on the new head, then decides.
 With local CI on (agent-team.json mergeGate.localCiOnUpdate, or AGENT_TEAM_LOCAL_CI=1), --update runs
@@ -31,7 +31,7 @@ from typing import Callable, Optional, Union
 sys.dont_write_bytecode = True  # Keep __pycache__ out of the project's scripts/ folder.
 from agent_team_config import Config, ConfigError, load_config  # noqa: E402
 
-USAGE = "Usage: scripts/merge-gate <PR> [--dry-run | --update | --rerun]"
+USAGE = "Usage: scripts/merge-gate <PR> [--dry-run | --update | [--update] --rerun]"
 
 # A caller must tell "the gate checked and said no" (refused) from "the gate could not check" (failed).
 EXIT_MERGED = 0
@@ -684,6 +684,9 @@ def parse_options(args: list[str], config: Config) -> Optional[Options]:
     if not args or not re.fullmatch(r"[1-9]\d*", args[0]):
         return None
     flags = args[1:]
+    # "--update --rerun" is the same as "--rerun", the spelling some projects' own gates use.
+    if flags == ["--update", "--rerun"]:
+        flags = ["--rerun"]
     mode = None if len(flags) > 1 else MODES_BY_FLAG.get(flags[0] if flags else None)
     # Tests shorten the wait through the environment so they don't depend on real time.
     interval_ms = parse_milliseconds(os.environ.get(POLL_INTERVAL_ENV), config.poll_interval_ms)

@@ -4,9 +4,9 @@
 # (mergeGate.localCiOnUpdate in agent-team.json, or AGENT_TEAM_LOCAL_CI=1), the gate runs $LOCAL_CI
 # on the head itself instead of waiting for GitHub Actions.
 # Pulls main after each merge. Stops at the first PR that doesn't merge.
-# RERUN=1 uses --rerun: local CI runs again even on a head that has results (the one flaky retry).
+# RERUN=1 uses --update --rerun: local CI runs again even on a head that has results (the one flaky retry).
 . "$(dirname "$0")/env.sh"
-MODE=--update; [ "${RERUN:-0}" = 1 ] && MODE=--rerun
+MODE=--update; [ "${RERUN:-0}" = 1 ] && MODE="--update --rerun"
 for P in "$@"; do
   echo "=== #$P"
   OUT=$(MERGE_GATE_LOCAL_CI="$LOCAL_CI" $GATE "$P" $MODE 2>&1); echo "$OUT" | tail -8
