@@ -34,6 +34,33 @@ background. It reviews, merges on `REVIEW: APPROVED`, cleans up, starts the next
 message. On a question or `CHANGES_REQUESTED` it stops and prints the message: answer the question and
 run it again with `RESUME=1`, or start a fixer as in step 5.
 
+## When more than one agent runs
+
+`review-merge.sh` assumes one agent. Once the stakeholder allows more (say 3 agents and 1 local CI),
+run the loop by hand:
+
+- Keep **one** `wait-msg.sh` in the background and handle each message yourself: ack, release
+  (`rm` for reviewers), then the next step (review, fixer, `queue.sh` or a reply). Start a new waiter
+  after each one; a waiter started with a plain `&` is not tracked, so stop it by PID.
+- Start each agent behind `wait-load.sh <cores>` and tell implementers to run only their own package's
+  tests while working, the full suite once at the end.
+- Run one `queue.sh` at a time. Chain the next merge behind the running gate:
+  `while ps -eo command | grep -q "[m]erge-gate <pr>"; do sleep 20; done && sh $S/queue.sh <next>`.
+- Gate chains with `&&`, not `;`, so a refused merge doesn't start the next worker.
+- A new commit on an approved PR needs a new review. The gate only carries an approval over a merge of
+  `main`.
+
+## When the agents hit a usage limit
+
+Workers stop mid-task and may leave a worktree half done (say, mid-rebase) with a handoff note. After the
+limit resets:
+
+1. Rebind the run: `orca orchestration run-use --id $ORCA_RUN`.
+2. Check each running dispatch for progress (PR comments, commits). Release the stalled ones and start
+   them again; a reviewer just starts over.
+3. For a half-done fixer, keep its worktree, copy its handoff note somewhere stable and start a new fixer
+   on the same branch that reads the note first.
+
 ## When the stakeholder adds a rule
 
 During a sprint the stakeholder will say things like "clean code by industry standards", "issues depend
