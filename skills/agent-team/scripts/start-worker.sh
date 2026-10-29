@@ -9,7 +9,7 @@ ROLE=$1; N=$2; SLUG=$3; EXTRA=$4
 ROLE_FILE=$ROLE; [ "$ROLE" = pm ] && ROLE_FILE=project-manager
 orca orchestration worker-start --run "$ORCA_RUN" --worktree new-top-level --name "$ROLE-$N-$SLUG" \
   --agent claude --setup run --task-title "$ROLE #$N" --spec "You are the ${ROLE} on the team (Scrum${SPRINT:+, $SPRINT}). Read docs/agents/roles/_common.md, docs/agents/roles/${ROLE_FILE}.md and docs/agents/code-standards.md first (if they exist), then CLAUDE.md and the docs your issue links. Use the skills your role file names.
-Your issue: ${REPO} #${N} (gh issue view ${N} --repo ${REPO} --comments). Do exactly that issue, nothing outside its Ownership. Its Blocked-by issues are closed.
+Your issue: ${REPO} #${N} (gh issue view ${N} --repo ${REPO} --json title,body,comments). Do exactly that issue, nothing outside its Ownership. Its Blocked-by issues are closed.
 ${EXTRA}
 $(agent_rules)
 Branch: ${ROLE}/${N}-${SLUG} from origin/main (git fetch first), unless told above to continue an existing branch. For code: test first (red, green, refactor), and the project's typecheck, lint, format and test commands must pass.

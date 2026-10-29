@@ -28,4 +28,5 @@ Issues live in GitHub Issues on `<owner/repo>`. Use the `gh` CLI.
 
 ## When a skill says "fetch the relevant ticket"
 
-`gh issue view <N> --repo <owner/repo> --comments`
+`gh issue view <N> --repo <owner/repo> --json title,body,comments` (the body and the comments; without a
+terminal, `--comments` alone prints only the comments)

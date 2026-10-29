@@ -1,7 +1,9 @@
 # Rules every role follows
 
 - Read `CLAUDE.md`, `GLOSSARY.md`, [team.md](../team.md) and your role file before anything else.
-- Work only on the issue you were given: `gh issue view <N> --repo <owner/repo> --comments`.
+- Work only on the issue you were given. Read its body and its comments:
+  `gh issue view <N> --repo <owner/repo> --json title,body,comments`. Without a terminal, `--comments` prints
+  only the comments and no body, so don't use it alone.
 - Start from the latest `origin/main` on a branch named `<role>/<issue-number>-<slug>`.
 - Edit only the folders the issue's **Ownership** line gives you. Anything else: ask the coordinator.
 - Shared contracts (`<spec folder>`) belong to the coordinator unless your issue says otherwise.
